@@ -11,7 +11,7 @@ namespace GenEvent.Runtime.example
             _test = test;
         }
 
-        [OnGameEvent]
+        [OnEvent]
         public void OnEvent(ExampleEvent exampleEvent)
         {
             if (_test != null)
@@ -20,7 +20,7 @@ namespace GenEvent.Runtime.example
             }
         }
         
-        [OnGameEvent]
+        [OnEvent]
         public void OnEvent3(ExampleEvent2 eventExample)
         {
             if (_test != null)

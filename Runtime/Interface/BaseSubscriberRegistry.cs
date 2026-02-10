@@ -11,18 +11,18 @@ public abstract partial class BaseSubscriberRegistry
 
     public abstract void StopListening<TSubscriber>(TSubscriber self)
         where TSubscriber : class;
-    
-    public void StartListening<TSubscriber, TEvent>(TSubscriber self) 
-        where TEvent : struct, IGameEvent<TEvent>
-        where TSubscriber: class
+
+    public void StartListening<TSubscriber, TGenEvent>(TSubscriber self)
+        where TGenEvent : struct, IGenEvent<TGenEvent>
+        where TSubscriber : class
     {
-        GameEventRegistry<TEvent, TSubscriber>.Register(self);
+        GenEventRegistry<TGenEvent, TSubscriber>.Register(self);
     }
 
-    public void StopListening<TSubscriber, TEvent>(TSubscriber self)
-        where TEvent : struct, IGameEvent<TEvent>
-        where TSubscriber: class
+    public void StopListening<TSubscriber, TGenEvent>(TSubscriber self)
+        where TGenEvent : struct, IGenEvent<TGenEvent>
+        where TSubscriber : class
     {
-        GameEventRegistry<TEvent, TSubscriber>.UnRegister(self);
+        GenEventRegistry<TGenEvent, TSubscriber>.UnRegister(self);
     }
 }

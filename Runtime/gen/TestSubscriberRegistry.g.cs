@@ -5,12 +5,12 @@ public class TestSubscriberRegistry : BaseSubscriberRegistry
 {
     static TestSubscriberRegistry()
     {
-        GameEventRegistry<ExampleEvent, TestSubscriber>.Initialize((gameEvent, subscriber) =>
+        GenEventRegistry<ExampleEvent, TestSubscriber>.Initialize((gameEvent, subscriber) =>
         {
             subscriber.OnEvent(gameEvent);
         });
 
-        GameEventRegistry<ExampleEvent2, TestSubscriber>.Initialize((gameEvent, subscriber) =>
+        GenEventRegistry<ExampleEvent2, TestSubscriber>.Initialize((gameEvent, subscriber) =>
         {
             subscriber.OnEvent3(gameEvent);
         });

@@ -5,6 +5,6 @@ public abstract partial class BaseEventPublisher
 {
     public static readonly Dictionary<Type, BaseEventPublisher> Publishers = new();
 
-    public abstract void Publish<TEvent>(TEvent @event, object emitter)
-        where TEvent : struct, IGameEvent<TEvent>;
+    public abstract void Publish<TGenEvent>(TGenEvent @event, object emitter)
+        where TGenEvent : struct, IGenEvent<TGenEvent>;
 }

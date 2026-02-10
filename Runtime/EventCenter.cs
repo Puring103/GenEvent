@@ -4,10 +4,10 @@ namespace GenEvent.Runtime
 {
     public static class EventCenter
     {
-        public static void Publish<TEvent>(this TEvent gameEvent, object subscriber)
-            where TEvent : struct, IGameEvent<TEvent>
+        public static void Publish<TGenEvent>(this TGenEvent gameEvent, object subscriber)
+            where TGenEvent : struct, IGenEvent<TGenEvent>
         {
-            var publisher = BaseEventPublisher.Publishers[typeof(TEvent)];
+            var publisher = BaseEventPublisher.Publishers[typeof(TGenEvent)];
             publisher?.Publish(gameEvent, subscriber);
         }
 
