@@ -2,16 +2,10 @@
 using System.Collections.Generic;
 using GenEvent.Runtime.example;
 
-namespace GenEvent.Runtime.Interface
+public partial interface IPublisher
 {
-    public interface IPublisher
-    {
-        public static Dictionary<Type, IPublisher> Publishers = new()
-        {
-            [typeof(EventExample)]= new EventExampleInvoker()
-        };
+    public static readonly Dictionary<Type, IPublisher> Publishers = new();
 
-        public void Publish<TEvent>(TEvent @event, object emitter)
-            where TEvent : struct, IGameEvent<TEvent>;
-    }
+    public void Publish<TEvent>(TEvent @event, object emitter)
+        where TEvent : struct, IGameEvent<TEvent>;
 }

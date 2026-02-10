@@ -1,5 +1,4 @@
 using GenEvent.Runtime.example;
-using GenEvent.Runtime.Interface;
 
 namespace GenEvent.Runtime
 {

@@ -1,6 +1,4 @@
-﻿using GenEvent.Runtime.Interface;
-
-namespace GenEvent.Runtime.example
+﻿namespace GenEvent.Runtime.example
 {
     public struct EventExample : IGameEvent<EventExample>
     {

@@ -1,7 +1,4 @@
-namespace GenEvent.Runtime.Interface
+public interface IGameEvent<TEvent>
+    where TEvent : struct
 {
-    public interface IGameEvent<TEvent>
-        where TEvent : struct
-    {
-    }
 }

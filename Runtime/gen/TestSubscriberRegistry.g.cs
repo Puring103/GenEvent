@@ -1,38 +1,34 @@
 ﻿using GenEvent.Runtime;
 using GenEvent.Runtime.example;
-using GenEvent.Runtime.Interface;
 
-namespace GenEvent.Runtime.gen
+public class TestSubscriberContainer : ISubscriber
 {
-    public class TestSubscriberContainer : ISubscriber
+    public void StartListening<TSubscriber>(TSubscriber self)
     {
-        public void StartListening<TSubscriber>(TSubscriber self)
+        if (!GameEventRegistry<EventExample, TestSubscriber>.IsInitialized)
         {
-            if (!GameEventRegistry<EventExample, TestSubscriber>.IsInitialized)
+            GameEventRegistry<EventExample, TestSubscriber>.Initialize((gameEvent, subscriber) =>
             {
-                GameEventRegistry<EventExample, TestSubscriber>.Initialize((gameEvent, subscriber) =>
-                {
-                    subscriber.OnEvent(gameEvent);
-                });
-            }
-
-            GameEventRegistry<EventExample, TestSubscriber>.Register(self as TestSubscriber);
-
-            if (!GameEventRegistry<EventExample2, TestSubscriber>.IsInitialized)
-            {
-                GameEventRegistry<EventExample2, TestSubscriber>.Initialize((gameEvent, subscriber) =>
-                {
-                    subscriber.OnEvent3(gameEvent);
-                });
-            }
-
-            GameEventRegistry<EventExample2, TestSubscriber>.Register(self as TestSubscriber);
+                subscriber.OnEvent(gameEvent);
+            });
         }
 
-        public void StopListening<TSubscriber>(TSubscriber self)
+        GameEventRegistry<EventExample, TestSubscriber>.Register(self as TestSubscriber);
+
+        if (!GameEventRegistry<EventExample2, TestSubscriber>.IsInitialized)
         {
-            GameEventRegistry<EventExample, TestSubscriber>.UnRegister(self as TestSubscriber);
-            GameEventRegistry<EventExample2, TestSubscriber>.UnRegister(self as TestSubscriber);
+            GameEventRegistry<EventExample2, TestSubscriber>.Initialize((gameEvent, subscriber) =>
+            {
+                subscriber.OnEvent3(gameEvent);
+            });
         }
+
+        GameEventRegistry<EventExample2, TestSubscriber>.Register(self as TestSubscriber);
+    }
+
+    public void StopListening<TSubscriber>(TSubscriber self)
+    {
+        GameEventRegistry<EventExample, TestSubscriber>.UnRegister(self as TestSubscriber);
+        GameEventRegistry<EventExample2, TestSubscriber>.UnRegister(self as TestSubscriber);
     }
 }
