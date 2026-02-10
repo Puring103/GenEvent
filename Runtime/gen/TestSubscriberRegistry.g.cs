@@ -1,16 +1,16 @@
 ﻿using GenEvent.Runtime;
 using GenEvent.Runtime.example;
 
-public class TestSubscriberRegistry : SubscriberRegistry
+public class TestSubscriberRegistry : BaseSubscriberRegistry
 {
     static TestSubscriberRegistry()
     {
-        GameEventRegistry<EventExample, TestSubscriber>.Initialize((gameEvent, subscriber) =>
+        GameEventRegistry<ExampleEvent, TestSubscriber>.Initialize((gameEvent, subscriber) =>
         {
             subscriber.OnEvent(gameEvent);
         });
 
-        GameEventRegistry<EventExample2, TestSubscriber>.Initialize((gameEvent, subscriber) =>
+        GameEventRegistry<ExampleEvent2, TestSubscriber>.Initialize((gameEvent, subscriber) =>
         {
             subscriber.OnEvent3(gameEvent);
         });
@@ -19,14 +19,14 @@ public class TestSubscriberRegistry : SubscriberRegistry
     public override void StartListening<TSubscriber>(TSubscriber self)
         where TSubscriber : class
     {
-        StartListening<TSubscriber, EventExample>(self);
-        StartListening<TSubscriber, EventExample2>(self);
+        StartListening<TSubscriber, ExampleEvent>(self);
+        StartListening<TSubscriber, ExampleEvent2>(self);
     }
 
     public override void StopListening<TSubscriber>(TSubscriber self)
         where TSubscriber : class
     {
-        StopListening<TSubscriber, EventExample>(self);
-        StopListening<TSubscriber, EventExample2>(self);
+        StopListening<TSubscriber, ExampleEvent>(self);
+        StopListening<TSubscriber, ExampleEvent2>(self);
     }
 }

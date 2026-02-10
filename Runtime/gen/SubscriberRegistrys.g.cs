@@ -1,8 +1,8 @@
 ﻿using GenEvent.Runtime.example;
 
-public abstract partial class SubscriberRegistry
+public abstract partial class BaseSubscriberRegistry
 {
-    static SubscriberRegistry()
+    static BaseSubscriberRegistry()
     {
         Subscribers[typeof(TestSubscriber)] = new TestSubscriberRegistry();
     }

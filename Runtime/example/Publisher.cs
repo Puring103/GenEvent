@@ -6,7 +6,7 @@ public class Publisher : MonoBehaviour
 {
     public void PublishEvent()
     {
-        var exampleEvent = new EventExample {Message = "Hello, World!"};
+        var exampleEvent = new ExampleEvent {Message = "Hello, World!"};
         exampleEvent.Publish(this);
     }
 }

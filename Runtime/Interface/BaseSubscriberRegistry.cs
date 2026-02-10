@@ -2,9 +2,9 @@
 using System.Collections.Generic;
 using GenEvent.Runtime;
 
-public abstract partial class SubscriberRegistry
+public abstract partial class BaseSubscriberRegistry
 {
-    public static readonly Dictionary<Type, SubscriberRegistry> Subscribers = new();
+    public static readonly Dictionary<Type, BaseSubscriberRegistry> Subscribers = new();
 
     public abstract void StartListening<TSubscriber>(TSubscriber self)
         where TSubscriber : class;

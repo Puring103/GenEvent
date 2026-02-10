@@ -24,7 +24,7 @@ namespace GenEvent.Runtime.example
         private List<TestSubscriber> _subscribers = new List<TestSubscriber>();
         public int _eventReceivedCount = 0;
         private bool _isInitialized = false;
-        private EventExample _cachedEvent;
+        private ExampleEvent _cachedExampleEvent;
 
         private void Start()
         {
@@ -129,7 +129,7 @@ namespace GenEvent.Runtime.example
             var sw = Stopwatch.StartNew();
             long gcBefore = GC.CollectionCount(0);
 
-            var exampleEvent = new EventExample { Message = "Test Message" };
+            var exampleEvent = new ExampleEvent { Message = "Test Message" };
 
             for (int i = 0; i < publishCount; i++)
             {
@@ -167,7 +167,7 @@ namespace GenEvent.Runtime.example
             var sw = Stopwatch.StartNew();
             long gcBefore = GC.CollectionCount(0);
 
-            var exampleEvent = new EventExample { Message = "Test Message" };
+            var exampleEvent = new ExampleEvent { Message = "Test Message" };
 
             for (int i = 0; i < publishCount; i++)
             {
@@ -217,7 +217,7 @@ namespace GenEvent.Runtime.example
             var sw = Stopwatch.StartNew();
 
             // 使用固定字符串避免字符串插值产生的GC分配
-            var exampleEvent = new EventExample { Message = "Test Message" };
+            var exampleEvent = new ExampleEvent { Message = "Test Message" };
 
             for (int i = 0; i < publishCount; i++)
             {
@@ -300,7 +300,7 @@ namespace GenEvent.Runtime.example
             }
 
             // 缓存事件对象，避免每次创建
-            _cachedEvent = new EventExample { Message = "Update Test Message" };
+            _cachedExampleEvent = new ExampleEvent { Message = "Update Test Message" };
             _isInitialized = true;
 
             UnityEngine.Debug.Log($"[每帧测试] 订阅者初始化完成，开始每帧测试");
@@ -314,7 +314,7 @@ namespace GenEvent.Runtime.example
         {
             for (int i = 0; i < publishCount; i++)
             {
-                _cachedEvent.Publish(this);
+                _cachedExampleEvent.Publish(this);
             }
 
             if (logEachUpdate)

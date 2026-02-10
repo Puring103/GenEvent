@@ -1,11 +1,11 @@
 ﻿namespace GenEvent.Runtime.example
 {
-    public struct EventExample : IGameEvent<EventExample>
+    public struct ExampleEvent : IGameEvent<ExampleEvent>
     {
         public string Message { get; set; }
     }
 
-    public struct EventExample2 : IGameEvent<EventExample2>
+    public struct ExampleEvent2 : IGameEvent<ExampleEvent2>
     {
         public int number;
     }
