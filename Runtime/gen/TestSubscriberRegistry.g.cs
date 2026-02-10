@@ -6,7 +6,7 @@ namespace GenEvent.Runtime.gen
 {
     public class TestSubscriberContainer : ISubscriber
     {
-        public override void StartListening<TSubscriber>(TSubscriber self)
+        public void StartListening<TSubscriber>(TSubscriber self)
         {
             if (!GameEventRegistry<EventExample, TestSubscriber>.IsInitialized)
             {
@@ -29,7 +29,7 @@ namespace GenEvent.Runtime.gen
             GameEventRegistry<EventExample2, TestSubscriber>.Register(self as TestSubscriber);
         }
 
-        public override void StopListening<TSubscriber>(TSubscriber self)
+        public void StopListening<TSubscriber>(TSubscriber self)
         {
             GameEventRegistry<EventExample, TestSubscriber>.UnRegister(self as TestSubscriber);
             GameEventRegistry<EventExample2, TestSubscriber>.UnRegister(self as TestSubscriber);

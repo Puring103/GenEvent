@@ -3,11 +3,12 @@ using GenEvent.Runtime.Interface;
 
 namespace GenEvent.Runtime.example
 {
-    public partial struct EventExample: IInvokable<EventExample>
+    public struct EventExampleInvoker : IPublisher
     {
-        public void Invoke(EventExample @event, object emitter)
+        public void Publish<TEvent>(TEvent @event, object emitter)
+            where TEvent : struct, IGameEvent<TEvent>
         {
-            GameEventRegistry<EventExample, EventExample>.Invoke(@event);
+            GameEventRegistry<TEvent, TestSubscriber>.Invoke(@event);
         }
     }
 }

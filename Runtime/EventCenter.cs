@@ -1,3 +1,4 @@
+using GenEvent.Runtime.example;
 using GenEvent.Runtime.Interface;
 
 namespace GenEvent.Runtime
@@ -7,12 +8,13 @@ namespace GenEvent.Runtime
         public static void Publish<TEvent>(this TEvent gameEvent, object subscriber)
             where TEvent : struct, IGameEvent<TEvent>
         {
-            (gameEvent as IInvokable<TEvent>)?.Invoke(gameEvent, subscriber);
+            var publisher= IPublisher.Publishers[typeof(TEvent)];
+            publisher?.Publish(gameEvent, subscriber);
         }
 
         public static void StartListening<TSubscriber>(this TSubscriber subscriber)
         {
-            if (ISubscriber.Subscribers.TryGetValue(typeof(EventCenter), out var iSubscriber))
+            if (ISubscriber.Subscribers.TryGetValue(typeof(TestSubscriber), out var iSubscriber))
             {
                 iSubscriber.StartListening(subscriber);
             }
@@ -20,7 +22,7 @@ namespace GenEvent.Runtime
         
         public static void StopListening<TSubscriber>(this TSubscriber subscriber)
         {
-            if (ISubscriber.Subscribers.TryGetValue(typeof(EventCenter), out var iSubscriber))
+            if (ISubscriber.Subscribers.TryGetValue(typeof(TestSubscriber), out var iSubscriber))
             {
                 iSubscriber.StopListening(subscriber);
             }
