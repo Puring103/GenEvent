@@ -3,8 +3,8 @@ using GenEvent.Runtime.example;
 
 public class ExampleEventPublisher : BaseEventPublisher
 {
-    public override void Publish<TGenEvent>(TGenEvent @event, object emitter)
+    public override bool Publish<TGenEvent>(TGenEvent @event, object emitter, bool cancelable)
     {
-        GenEventRegistry<TGenEvent, TestSubscriber>.Invoke(@event);
+        return GenEventRegistry<TGenEvent, TestSubscriber>.Invoke(@event, cancelable);
     }
 }

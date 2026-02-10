@@ -3,7 +3,7 @@ using System.Collections.Generic;
 
 namespace GenEvent.Runtime
 {
-    public delegate void GenEventDelegate<in TGenEvent, in TSubscriber>(TGenEvent gameEvent, TSubscriber subscriber);
+    public delegate bool GenEventDelegate<in TGenEvent, in TSubscriber>(TGenEvent gameEvent, TSubscriber subscriber);
 
     public static class GenEventRegistry<TGenEvent, TSubscriber>
         where TGenEvent : struct, IGenEvent<TGenEvent>
@@ -26,12 +26,22 @@ namespace GenEvent.Runtime
             _subscribers.Remove(observer);
         }
 
-        public static void Invoke(TGenEvent gameEvent)
+        public static bool Invoke(TGenEvent gameEvent, bool cancelable)
         {
+            var completed = true;
+
             foreach (var subscriber in _subscribers)
             {
-                _genEvent?.Invoke(gameEvent, subscriber);
+                var shouldContinue = _genEvent?.Invoke(gameEvent, subscriber) ?? true;
+
+                if (cancelable && !shouldContinue)
+                {
+                    completed = false;
+                    break;
+                }
             }
+
+            return completed;
         }
     }
 }

@@ -4,11 +4,12 @@ namespace GenEvent.Runtime
 {
     public static class EventCenter
     {
-        public static void Publish<TGenEvent>(this TGenEvent gameEvent, object subscriber)
+
+        public static bool Publish<TGenEvent>(this TGenEvent gameEvent, object subscriber, bool cancelable = false)
             where TGenEvent : struct, IGenEvent<TGenEvent>
         {
             var publisher = BaseEventPublisher.Publishers[typeof(TGenEvent)];
-            publisher?.Publish(gameEvent, subscriber);
+            return publisher != null && publisher.Publish(gameEvent, subscriber, cancelable);
         }
 
         public static void StartListening<TSubscriber>(this TSubscriber subscriber)

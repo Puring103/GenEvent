@@ -8,11 +8,12 @@ public class TestSubscriberRegistry : BaseSubscriberRegistry
         GenEventRegistry<ExampleEvent, TestSubscriber>.Initialize((gameEvent, subscriber) =>
         {
             subscriber.OnEvent(gameEvent);
+            return true;
         });
 
         GenEventRegistry<ExampleEvent2, TestSubscriber>.Initialize((gameEvent, subscriber) =>
         {
-            subscriber.OnEvent3(gameEvent);
+            return subscriber.OnEvent3(gameEvent);
         });
     }
 
