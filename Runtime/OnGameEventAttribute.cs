@@ -2,7 +2,7 @@ using System;
 
 namespace GenEvent.Runtime
 {
-    [AttributeUsage(AttributeTargets.Method, AllowMultiple = false, Inherited = false)]
+    [AttributeUsage(AttributeTargets.Method, Inherited = false)]
     public class OnGameEventAttribute : Attribute
     {
         public SubscriberPriority Priority { get; }
