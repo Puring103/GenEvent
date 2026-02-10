@@ -1,6 +1,7 @@
 using UnityEngine;
 using GenEvent.Runtime;
 using GenEvent.Runtime.example;
+using GenEvent.Runtime.gen;
 
 public class Publisher : MonoBehaviour
 {
