@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using GenEvent.Runtime.example;
 
 namespace GenEvent.Runtime
@@ -34,20 +35,25 @@ namespace GenEvent.Runtime
             where TGenEvent : struct, IGenEvent<TGenEvent>
             where TSubscriber : class
         {
-            if (BaseSubscriberRegistry.Subscribers.TryGetValue(typeof(TSubscriber), out var iSubscriber))
-            {
-                BaseSubscriberRegistry.StartListening<TSubscriber, TGenEvent>(subscriber);
-            }
+            BaseSubscriberRegistry.StartListening<TSubscriber, TGenEvent>(subscriber);
         }
 
         public static void StopListening<TSubscriber, TGenEvent>(this TSubscriber subscriber)
             where TGenEvent : struct, IGenEvent<TGenEvent>
             where TSubscriber : class
         {
-            if (BaseSubscriberRegistry.Subscribers.TryGetValue(typeof(TSubscriber), out var iSubscriber))
-            {
-                BaseSubscriberRegistry.StopListening<TSubscriber, TGenEvent>(subscriber);
-            }
+            BaseSubscriberRegistry.StopListening<TSubscriber, TGenEvent>(subscriber);
         }
+    }
+
+    public class PublishConfig
+    {
+        public bool Cancelable { get; set; } = false;
+        public List<ISubscriberFilter> SubscriberFilters { get; set; } = new(1);
+    }
+
+    public interface ISubscriberFilter
+    {
+        bool CanFilter(object subscriber);
     }
 }
