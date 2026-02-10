@@ -10,7 +10,6 @@ namespace GenEvent.Runtime
     {
         private static readonly List<TSubscriber> _subscribers = new();
         private static event GameEventDelegate<TEvent, TSubscriber> _gameEvent;
-        public static bool IsInitialized => _gameEvent != null;
 
         public static void Initialize(GameEventDelegate<TEvent, TSubscriber> gameEventDelegate)
         {

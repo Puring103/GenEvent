@@ -1,34 +1,32 @@
 ﻿using GenEvent.Runtime;
 using GenEvent.Runtime.example;
 
-public class TestSubscriberRegistry : ISubscriberRegistry
+public class TestSubscriberRegistry : SubscriberRegistry
 {
-    public void StartListening<TSubscriber>(TSubscriber self)
+    static TestSubscriberRegistry()
     {
-        if (!GameEventRegistry<EventExample, TestSubscriber>.IsInitialized)
+        GameEventRegistry<EventExample, TestSubscriber>.Initialize((gameEvent, subscriber) =>
         {
-            GameEventRegistry<EventExample, TestSubscriber>.Initialize((gameEvent, subscriber) =>
-            {
-                subscriber.OnEvent(gameEvent);
-            });
-        }
+            subscriber.OnEvent(gameEvent);
+        });
 
-        GameEventRegistry<EventExample, TestSubscriber>.Register(self as TestSubscriber);
-
-        if (!GameEventRegistry<EventExample2, TestSubscriber>.IsInitialized)
+        GameEventRegistry<EventExample2, TestSubscriber>.Initialize((gameEvent, subscriber) =>
         {
-            GameEventRegistry<EventExample2, TestSubscriber>.Initialize((gameEvent, subscriber) =>
-            {
-                subscriber.OnEvent3(gameEvent);
-            });
-        }
-
-        GameEventRegistry<EventExample2, TestSubscriber>.Register(self as TestSubscriber);
+            subscriber.OnEvent3(gameEvent);
+        });
     }
 
-    public void StopListening<TSubscriber>(TSubscriber self)
+    public override void StartListening<TSubscriber>(TSubscriber self)
+        where TSubscriber : class
     {
-        GameEventRegistry<EventExample, TestSubscriber>.UnRegister(self as TestSubscriber);
-        GameEventRegistry<EventExample2, TestSubscriber>.UnRegister(self as TestSubscriber);
+        StartListening<TSubscriber, EventExample>(self);
+        StartListening<TSubscriber, EventExample2>(self);
+    }
+
+    public override void StopListening<TSubscriber>(TSubscriber self)
+        where TSubscriber : class
+    {
+        StopListening<TSubscriber, EventExample>(self);
+        StopListening<TSubscriber, EventExample2>(self);
     }
 }
