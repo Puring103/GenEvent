@@ -2,10 +2,10 @@
 using System.Collections.Generic;
 using GenEvent.Runtime.example;
 
-public partial interface IPublisher
+public partial interface IEventPublisher
 {
-    static IPublisher()
+    static IEventPublisher()
     {
-        Publishers[typeof(EventExample)] = new EventExampleInvoker();
+        Publishers[typeof(EventExample)] = new EventExamplePublisher();
     }
 }

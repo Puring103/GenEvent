@@ -5,7 +5,6 @@ namespace GenEvent.Runtime
 {
     public delegate void GameEventDelegate<in TEvent, in TSubscriber>(TEvent gameEvent, TSubscriber subscriber);
 
-
     public static class GameEventRegistry<TEvent, TSubscriber>
         where TEvent : struct, IGameEvent<TEvent>
     {

@@ -1,7 +1,7 @@
 ﻿using GenEvent.Runtime;
 using GenEvent.Runtime.example;
 
-public class TestSubscriberContainer : ISubscriber
+public class TestSubscriberRegistry : ISubscriberRegistry
 {
     public void StartListening<TSubscriber>(TSubscriber self)
     {
