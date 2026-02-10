@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using GenEvent.Runtime.Interface;
 
 namespace GenEvent.Runtime
 {
@@ -7,35 +8,32 @@ namespace GenEvent.Runtime
 
 
     public static class GameEventRegistry<TEvent, TSubscriber>
-        where TEvent : struct, IGameEvent
+        where TEvent : struct, IGameEvent<TEvent>
     {
-
         private static readonly List<TSubscriber> _subscribers = new();
         private static event GameEventDelegate<TEvent, TSubscriber> _gameEvent;
-        public static bool IsInitialized { get; private set; }
+        public static bool IsInitialized => _gameEvent != null;
 
         public static void Initialize(GameEventDelegate<TEvent, TSubscriber> gameEventDelegate)
         {
             _gameEvent = gameEventDelegate;
-            IsInitialized = true;
         }
 
-        public static void Add(TSubscriber observer)
+        public static void Register(TSubscriber observer)
         {
             _subscribers.Add(observer);
         }
 
-        public static void Remove(TSubscriber observer)
+        public static void UnRegister(TSubscriber observer)
         {
             _subscribers.Remove(observer);
         }
 
-        public static void Invoke(Object emitter, TEvent gameEvent)
+        public static void Invoke(TEvent gameEvent)
         {
             foreach (var subscriber in _subscribers)
             {
-                if (_gameEvent != null)
-                    _gameEvent.Invoke(gameEvent, subscriber);
+                _gameEvent?.Invoke(gameEvent, subscriber);
             }
         }
     }

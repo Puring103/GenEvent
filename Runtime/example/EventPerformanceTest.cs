@@ -2,7 +2,6 @@ using System;
 using System.Diagnostics;
 using System.Collections.Generic;
 using UnityEngine;
-using GenEvent.Runtime.gen;
 
 namespace GenEvent.Runtime.example
 {
@@ -84,7 +83,7 @@ namespace GenEvent.Runtime.example
                 var go = new GameObject($"TestSubscriber_{i}");
                 var subscriber = go.AddComponent<TestSubscriber>();
                 subscriber.SetTest(this);
-                subscriber.Bind();
+                subscriber.StartListening();
                 _subscriberObjects.Add(go);
                 _subscribers.Add(subscriber);
             }
@@ -102,7 +101,7 @@ namespace GenEvent.Runtime.example
 
             foreach (var subscriber in _subscribers)
             {
-                subscriber.Unbind();
+                subscriber.StopListening();
             }
 
             sw.Stop();
@@ -122,7 +121,7 @@ namespace GenEvent.Runtime.example
             var go = new GameObject("TestSubscriber_Single");
             var subscriber = go.AddComponent<TestSubscriber>();
             subscriber.SetTest(this);
-            subscriber.Bind();
+            subscriber.StartListening();
             _subscriberObjects.Add(go);
             _subscribers.Add(subscriber);
 
@@ -159,7 +158,7 @@ namespace GenEvent.Runtime.example
                 var go = new GameObject($"TestSubscriber_{i}");
                 var subscriber = go.AddComponent<TestSubscriber>();
                 subscriber.SetTest(this);
-                subscriber.Bind();
+                subscriber.StartListening();
                 _subscriberObjects.Add(go);
                 _subscribers.Add(subscriber);
             }
@@ -201,7 +200,7 @@ namespace GenEvent.Runtime.example
                 var go = new GameObject($"TestSubscriber_{i}");
                 var subscriber = go.AddComponent<TestSubscriber>();
                 subscriber.SetTest(this);
-                subscriber.Bind();
+                subscriber.StartListening();
                 _subscriberObjects.Add(go);
                 _subscribers.Add(subscriber);
             }
@@ -255,7 +254,7 @@ namespace GenEvent.Runtime.example
             {
                 if (subscriber != null)
                 {
-                    subscriber.Unbind();
+                    subscriber.StopListening();
                 }
             }
             _subscribers.Clear();
@@ -295,7 +294,7 @@ namespace GenEvent.Runtime.example
                 var go = new GameObject($"TestSubscriber_{i}");
                 var subscriber = go.AddComponent<TestSubscriber>();
                 subscriber.SetTest(this);
-                subscriber.Bind();
+                subscriber.StartListening();
                 _subscriberObjects.Add(go);
                 _subscribers.Add(subscriber);
             }

@@ -1,4 +1,3 @@
-using GenEvent.Runtime.gen;
 using UnityEngine;
 
 namespace GenEvent.Runtime.example
@@ -21,14 +20,13 @@ namespace GenEvent.Runtime.example
             }
         }
         
-        private void Start()
+        [OnGameEvent]
+        public void OnEvent3(EventExample2 eventExample)
         {
-            this.Bind();
-        }
-
-        private void OnDestroy()
-        {
-            this.Unbind();
+            if (_test != null)
+            {
+                eventExample.number++;
+            }
         }
     }
 }
