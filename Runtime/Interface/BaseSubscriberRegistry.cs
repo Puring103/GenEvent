@@ -12,14 +12,14 @@ public abstract partial class BaseSubscriberRegistry
     public abstract void StopListening<TSubscriber>(TSubscriber self)
         where TSubscriber : class;
 
-    public void StartListening<TSubscriber, TGenEvent>(TSubscriber self)
+    public static void StartListening<TSubscriber, TGenEvent>(TSubscriber self)
         where TGenEvent : struct, IGenEvent<TGenEvent>
         where TSubscriber : class
     {
         GenEventRegistry<TGenEvent, TSubscriber>.Register(self);
     }
 
-    public void StopListening<TSubscriber, TGenEvent>(TSubscriber self)
+    public static void StopListening<TSubscriber, TGenEvent>(TSubscriber self)
         where TGenEvent : struct, IGenEvent<TGenEvent>
         where TSubscriber : class
     {
