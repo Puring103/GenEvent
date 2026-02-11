@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using GenEvent.Interface;
 
@@ -53,11 +54,53 @@ namespace GenEvent
             PublishConfig<TGenEvent>.Instance.SetCancelable();
         }
 
-        public static void WithFilter<TFilter, TGenEvent>(TFilter filter)
+        public static TGenEvent WithFilter<TGenEvent>(this TGenEvent gameEvent, Predicate<object> filter)
             where TGenEvent : struct, IGenEvent<TGenEvent>
-            where TFilter : struct, ISubscriberFilter
         {
             PublishConfig<TGenEvent>.Instance.AddFilter(filter);
+            return gameEvent;
+        }
+
+        public static TGenEvent ExcludeSubscriber<TGenEvent>(this TGenEvent gameEvent, object subscriber)
+            where TGenEvent : struct, IGenEvent<TGenEvent>
+        {
+            PublishConfig<TGenEvent>.Instance.AddFilter(GenEventFilters.ExcludeSubscriber(subscriber));
+            return gameEvent;
+        }
+
+        public static TGenEvent IncludeSubscriber<TGenEvent>(this TGenEvent gameEvent, object subscriber)
+            where TGenEvent : struct, IGenEvent<TGenEvent>
+        {
+            PublishConfig<TGenEvent>.Instance.AddFilter(GenEventFilters.IncludeSubscriber(subscriber));
+            return gameEvent;
+        }
+
+        public static TGenEvent ExcludeSubscribers<TGenEvent>(this TGenEvent gameEvent, HashSet<object> subscribers)
+            where TGenEvent : struct, IGenEvent<TGenEvent>
+        {
+            PublishConfig<TGenEvent>.Instance.AddFilter(GenEventFilters.ExcludeSubscribers(subscribers));
+            return gameEvent;
+        }
+
+        public static TGenEvent IncludeSubscribers<TGenEvent>(this TGenEvent gameEvent, HashSet<object> subscribers)
+            where TGenEvent : struct, IGenEvent<TGenEvent>
+        {
+            PublishConfig<TGenEvent>.Instance.AddFilter(GenEventFilters.IncludeSubscribers(subscribers));
+            return gameEvent;
+        }
+
+        public static TGenEvent OnlyType<TGenEvent, TSubscriber>(this TGenEvent gameEvent)
+            where TGenEvent : struct, IGenEvent<TGenEvent>
+        {
+            PublishConfig<TGenEvent>.Instance.AddFilter(GenEventFilters.OnlyType<TSubscriber>());
+            return gameEvent;
+        }
+
+        public static TGenEvent ExcludeType<TGenEvent, TSubscriber>(this TGenEvent gameEvent)
+            where TGenEvent : struct, IGenEvent<TGenEvent>
+        {
+            PublishConfig<TGenEvent>.Instance.AddFilter(GenEventFilters.ExcludeType<TSubscriber>());
+            return gameEvent;
         }
 
         public static bool Invoke<TSubscriber, TGenEvent>(this TGenEvent gameEvent)
@@ -90,7 +133,7 @@ namespace GenEvent
     {
         private bool _cancelable = false;
         public bool Cancelable => _cancelable;
-        private List<ISubscriberFilter> _subscriberFilters { get; set; } = new(1);
+        private List<Predicate<object>> _subscriberFilters { get; set; } = new(16);
 
         private static PublishConfig<TGenEvent> instance;
 
@@ -114,16 +157,16 @@ namespace GenEvent
             _cancelable = true;
         }
 
-        public void AddFilter(ISubscriberFilter filter)
+        public void AddFilter(Predicate<object> filter)
         {
             _subscriberFilters.Add(filter);
         }
 
         public bool IsFiltered(object subscriber)
         {
-            for (int i = 0; i < Instance._subscriberFilters.Count; i++)
+            for (int i = 0; i < _subscriberFilters.Count; i++)
             {
-                if (Instance._subscriberFilters[i].IsFiltered(subscriber))
+                if (_subscriberFilters[i](subscriber))
                 {
                     return true;
                 }
@@ -131,10 +174,5 @@ namespace GenEvent
 
             return false;
         }
-    }
-
-    public interface ISubscriberFilter
-    {
-        bool IsFiltered(object subscriber);
     }
 }

@@ -14,7 +14,7 @@ namespace GenEvent.SourceGenerator
     [Generator]
     public class GenEventSourceGenerator : ISourceGenerator
     {
-        private const string IGenEventMetadataName = "GenEvent.Interface.IGenEvent`1";
+        private const string GenEventMetadataName = "GenEvent.Interface.IGenEvent`1";
         private const string OnEventAttributeMetadataName = "GenEvent.OnEventAttribute";
 
         public void Initialize(GeneratorInitializationContext context)
@@ -27,7 +27,7 @@ namespace GenEvent.SourceGenerator
             {
                 var compilation = context.Compilation;
 
-                var iGenEventSymbol = compilation.GetTypeByMetadataName(IGenEventMetadataName);
+                var iGenEventSymbol = compilation.GetTypeByMetadataName(GenEventMetadataName);
                 var onEventAttributeSymbol = compilation.GetTypeByMetadataName(OnEventAttributeMetadataName);
 
                 if (iGenEventSymbol == null)
@@ -213,7 +213,7 @@ namespace GenEvent.SourceGenerator
 
         private static bool ImplementsIGenEvent(INamedTypeSymbol type, Compilation compilation)
         {
-            var iGenEvent = compilation.GetTypeByMetadataName(IGenEventMetadataName);
+            var iGenEvent = compilation.GetTypeByMetadataName(GenEventMetadataName);
             if (iGenEvent == null) return false;
 
             var constructed = iGenEvent.Construct(type);
@@ -375,7 +375,7 @@ namespace GenEvent.SourceGenerator
 
             private static bool ImplementsIGenEvent(INamedTypeSymbol type, Compilation compilation)
             {
-                var iGenEvent = compilation.GetTypeByMetadataName(IGenEventMetadataName);
+                var iGenEvent = compilation.GetTypeByMetadataName(GenEventMetadataName);
                 if (iGenEvent == null) return false;
                 return type.AllInterfaces.Any(i => SymbolEqualityComparer.Default.Equals(i.OriginalDefinition, iGenEvent));
             }
