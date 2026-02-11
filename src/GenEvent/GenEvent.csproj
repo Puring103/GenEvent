@@ -31,4 +31,10 @@
     <Message Text="源码复制完成！" Importance="high" />
   </Target>
 
+  <ItemGroup>
+    <ProjectReference Include="..\GenEvent.SourceGenerator\GenEvent.SourceGenerator.csproj"
+                      OutputItemType="Analyzer"
+                      ReferenceOutputAssembly="false" />
+  </ItemGroup>
+
 </Project>
