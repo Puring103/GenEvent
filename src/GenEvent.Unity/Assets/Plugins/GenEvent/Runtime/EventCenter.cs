@@ -9,7 +9,7 @@ namespace GenEvent
             where TGenEvent : struct, IGenEvent<TGenEvent>
         {
             var publisher = BaseEventPublisher.Publishers[typeof(TGenEvent)];
-            var result = publisher != null && publisher.Publish(gameEvent, subscriber);
+            var result = publisher.Publish(gameEvent, subscriber);
             PublishConfig<TGenEvent>.Instance.Clear();
 
             return result;

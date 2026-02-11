@@ -5,6 +5,8 @@ namespace GenEvent.SourceGenerator
         public const string EventPublisher = @"{UsingNamespaces}
 using System.CodeDom.Compiler;
 
+namespace GenEvent
+{
 [GeneratedCode(""GenEvent"",""V0.5"")]
 public class {EventName}Publisher : BaseEventPublisher
 {
@@ -17,11 +19,14 @@ public class {EventName}Publisher : BaseEventPublisher
         return completed;
     }
 }
+}
 ";
 
         public const string SubscriberRegistry = @"{UsingNamespaces}
 using System.CodeDom.Compiler;
 
+namespace GenEvent
+{
 [GeneratedCode(""GenEvent"",""V0.5"")]
 public class {SubscriberName}SubscriberRegistry : BaseSubscriberRegistry
 {
@@ -42,36 +47,26 @@ public class {SubscriberName}SubscriberRegistry : BaseSubscriberRegistry
 {StopListeningCalls}
     }
 }
+}
 ";
 
-        public const string EventPublishers = @"using System;
-using System.Collections.Generic;
+        /// <summary>
+        /// Bootstrap 初始化类，将 Publisher/SubscriberRegistry 注册到基类。
+        /// 非 Unity：消费者需在启动时调用 Init()；Unity：{InitAttribute} 会填入 RuntimeInitializeOnLoadMethod，程序集加载后自动执行 Init()。
+        /// </summary>
+        public const string GenEventBootstrap = @"using System;
 using System.CodeDom.Compiler;
+using GenEvent.Interface;
 
-namespace GenEvent.Interface
+namespace GenEvent
 {
 [GeneratedCode(""GenEvent"",""V0.5"")]
-public abstract partial class BaseEventPublisher
+internal static class GenEventBootstrap
 {
-    static BaseEventPublisher()
+{InitAttribute}
+    public static void Init()
     {
 {PublisherRegistrations}
-    }
-}
-}
-";
-
-        public const string SubscriberRegistrys = @"using System;
-using System.Collections.Generic;
-using System.CodeDom.Compiler;
-
-namespace GenEvent.Interface
-{
-[GeneratedCode(""GenEvent"",""V0.5"")]
-public abstract partial class BaseSubscriberRegistry
-{
-    static BaseSubscriberRegistry()
-    {
 {SubscriberRegistrations}
     }
 }

@@ -1,4 +1,4 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
     <TargetFramework>netstandard2.0</TargetFramework>
@@ -21,6 +21,10 @@
     <Message Text="正在复制源码到 Unity Runtime 目录..." Importance="high" />
     <Message Text="源目录: $(SourceCodeDir)" Importance="normal" />
     <Message Text="目标目录: $(UnityRuntimeDir)" Importance="normal" />
+    
+    <!-- 先删除目标目录原有内容，再复制 -->
+    <RemoveDir Directories="$(UnityRuntimeDir)" Condition="Exists('$(UnityRuntimeDir)')" />
+    <MakeDir Directories="$(UnityRuntimeDir)" />
     
     <!-- 复制所有 .cs 文件，保持目录结构 -->
     <Copy

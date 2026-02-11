@@ -1,9 +1,6 @@
 ﻿using UnityEngine;
 
-namespace GenEvent.Runtime.example
+public class TestSubscriber2: MonoBehaviour
 {
-    public class TestSubscriber2: MonoBehaviour
-    {
         
-    }
 }

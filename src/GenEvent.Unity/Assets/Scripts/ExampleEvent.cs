@@ -1,14 +1,11 @@
 ﻿using GenEvent.Interface;
 
-namespace GenEvent.Runtime.example
+public struct ExampleEvent : IGenEvent<ExampleEvent>
 {
-    public struct ExampleEvent : IGenEvent<ExampleEvent>
-    {
-        public string Message { get; set; }
-    }
+    public string Message { get; set; }
+}
     
-    public struct ExampleEvent2 : IGenEvent<ExampleEvent2>
-    {
-        public int number;
-    }
+public struct ExampleEvent2 : IGenEvent<ExampleEvent2>
+{
+    public int number;
 }

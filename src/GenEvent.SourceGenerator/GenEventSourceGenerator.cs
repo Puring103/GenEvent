@@ -52,16 +52,12 @@ namespace GenEvent.SourceGenerator
                 foreach (var d in diagnostics)
                     context.ReportDiagnostic(d);
 
-                if (events.Count == 0 && subscribers.Count == 0)
-                    return;
-
                 var eventToSubscribers = BuildEventSubscriberMap(subscribers);
                 var subscriberToEvents = BuildSubscriberEventMap(subscribers);
 
                 var eventPublisherTemplate = Templates.EventPublisher;
                 var subscriberRegistryTemplate = Templates.SubscriberRegistry;
-                var eventPublishersTemplate = Templates.EventPublishers;
-                var subscriberRegistrysTemplate = Templates.SubscriberRegistrys;
+                var hasUnity = IsUnityProject(compilation);
 
                 foreach (var evt in events)
                 {
@@ -80,17 +76,19 @@ namespace GenEvent.SourceGenerator
                 }
 
                 var publisherRegistrations = string.Join(Environment.NewLine,
-                    events.Select(e => $"        Publishers[typeof({e.FullName})] = new {e.Name}Publisher();"));
-                var eventPublishersSource = eventPublishersTemplate
-                    .Replace("{PublisherRegistrations}", publisherRegistrations);
-                context.AddSource("EventPublishers.g.cs", SourceText.From(eventPublishersSource, Encoding.UTF8));
-
+                    events.Select(e => $"        BaseEventPublisher.Publishers[typeof({e.FullName})] = new {e.Name}Publisher();"));
                 var subscriberRegs = subscribers.GroupBy(s => s.SubscriberType, SymbolEqualityComparer.Default);
                 var subscriberRegistrations = string.Join(Environment.NewLine,
-                    subscriberRegs.Select(g => $"        Subscribers[typeof({g.Key.ToDisplayString()})] = new {g.Key.Name}SubscriberRegistry();"));
-                var subscriberRegistrysSource = subscriberRegistrysTemplate
+                    subscriberRegs.Select(g => $"        BaseSubscriberRegistry.Subscribers[typeof({g.Key.ToDisplayString()})] = new {g.Key.Name}SubscriberRegistry();"));
+
+                var initAttribute = hasUnity
+                    ? "[UnityEngine.RuntimeInitializeOnLoadMethod(UnityEngine.RuntimeInitializeLoadType.AfterAssembliesLoaded)]"
+                    : "";
+                var bootstrapSource = Templates.GenEventBootstrap
+                    .Replace("{InitAttribute}", initAttribute)
+                    .Replace("{PublisherRegistrations}", publisherRegistrations)
                     .Replace("{SubscriberRegistrations}", subscriberRegistrations);
-                context.AddSource("SubscriberRegistrys.g.cs", SourceText.From(subscriberRegistrysSource, Encoding.UTF8));
+                context.AddSource("GenEventBootstrap.g.cs", SourceText.From(bootstrapSource, Encoding.UTF8));
             }
             catch (Exception ex)
             {
@@ -98,6 +96,22 @@ namespace GenEvent.SourceGenerator
                     new DiagnosticDescriptor("GE999", "Generator error", $"GenEvent source generator failed: {ex.Message}", "GenEvent", DiagnosticSeverity.Error, true),
                     Location.None));
             }
+        }
+
+        /// <summary>
+        /// 检测当前编译是否为 Unity 项目（引用 UnityEngine 或 UnityEditor），
+        /// 以便为 GenEventBootstrap.Init 自动添加 [RuntimeInitializeOnLoadMethod]。
+        /// </summary>
+        private static bool IsUnityProject(Compilation compilation)
+        {
+            foreach (var name in compilation.ReferencedAssemblyNames)
+            {
+                var n = name.Name;
+                if (n != null && (n.StartsWith("UnityEngine", StringComparison.OrdinalIgnoreCase) ||
+                    n.StartsWith("UnityEditor", StringComparison.OrdinalIgnoreCase)))
+                    return true;
+            }
+            return false;
         }
 
         private static List<EventInfo> CollectEvents(Compilation compilation, INamedTypeSymbol iGenEventSymbol)
@@ -287,15 +301,25 @@ namespace GenEvent.SourceGenerator
                 .Replace("{StopListeningCalls}", stopCalls.ToString().TrimEnd());
         }
 
+        private const string GlobalNamespaceDisplay = "<global namespace>";
+
         private static string CollectUsings(INamedTypeSymbol primary, IEnumerable<INamedTypeSymbol> additional)
         {
             var namespaces = new HashSet<string> { "GenEvent", "GenEvent.Interface" };
-            if (primary != null && !string.IsNullOrEmpty(primary.ContainingNamespace?.ToDisplayString()))
-                namespaces.Add(primary.ContainingNamespace.ToDisplayString());
+            if (primary != null)
+            {
+                var ns = primary.ContainingNamespace?.ToDisplayString();
+                if (!string.IsNullOrEmpty(ns) && ns != GlobalNamespaceDisplay)
+                    namespaces.Add(ns);
+            }
             foreach (var sym in additional)
             {
-                if (sym != null && !string.IsNullOrEmpty(sym.ContainingNamespace?.ToDisplayString()))
-                    namespaces.Add(sym.ContainingNamespace.ToDisplayString());
+                if (sym != null)
+                {
+                    var ns = sym.ContainingNamespace?.ToDisplayString();
+                    if (!string.IsNullOrEmpty(ns) && ns != GlobalNamespaceDisplay)
+                        namespaces.Add(ns);
+                }
             }
             var usings = namespaces.OrderBy(n => n).Select(n => $"using {n};").ToList();
             return string.Join(Environment.NewLine, usings);
