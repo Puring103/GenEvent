@@ -48,10 +48,11 @@ namespace GenEvent
             BaseSubscriberRegistry.StopListening<TSubscriber, TGenEvent>(subscriber);
         }
 
-        public static void Cancelable<TGenEvent>()
+        public static TGenEvent Cancelable<TGenEvent>(this TGenEvent gameEvent)
             where TGenEvent : struct, IGenEvent<TGenEvent>
         {
             PublishConfig<TGenEvent>.Instance.SetCancelable();
+            return gameEvent;
         }
 
         public static TGenEvent WithFilter<TGenEvent>(this TGenEvent gameEvent, Predicate<object> filter)

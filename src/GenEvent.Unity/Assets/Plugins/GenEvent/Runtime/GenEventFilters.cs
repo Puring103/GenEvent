@@ -20,7 +20,7 @@ namespace GenEvent
         public static Predicate<object> ExcludeSubscribers(HashSet<object> subscribers)
         {
             if (subscribers == null) throw new ArgumentNullException(nameof(subscribers));
-            return s => subscribers.Contains(s);
+            return subscribers.Contains;
         }
 
         public static Predicate<object> IncludeSubscribers(HashSet<object> subscribers)
@@ -31,7 +31,9 @@ namespace GenEvent
 
         private static class TypeFilterCache<TSubscriber>
         {
-            public static readonly Predicate<object> OnlyType = s => s is TSubscriber;
+            // OnlyType: filter out (skip) when subscriber is NOT of type - only TSubscriber receives
+            public static readonly Predicate<object> OnlyType = s => s is not TSubscriber;
+            // ExcludeType: filter out (skip) when subscriber IS of type
             public static readonly Predicate<object> ExcludeType = s => s is TSubscriber;
         }
 
