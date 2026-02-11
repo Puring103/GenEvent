@@ -5,4 +5,30 @@
     <LangVersion>9</LangVersion>
   </PropertyGroup>
 
+  <!-- 定义源目录和目标目录 -->
+  <PropertyGroup>
+    <SourceCodeDir>$(MSBuildProjectDirectory)\src\</SourceCodeDir>
+    <UnityRuntimeDir>$(MSBuildProjectDirectory)\..\GenEvent.Unity\Assets\Plugins\GenEvent\Runtime\</UnityRuntimeDir>
+  </PropertyGroup>
+
+  <!-- 收集所有源码文件 -->
+  <ItemGroup>
+    <SourceFiles Include="$(SourceCodeDir)**\*.cs" />
+  </ItemGroup>
+
+  <!-- 构建后复制源码到 Unity Runtime 目录 -->
+  <Target Name="CopySourceToUnity" AfterTargets="Build">
+    <Message Text="正在复制源码到 Unity Runtime 目录..." Importance="high" />
+    <Message Text="源目录: $(SourceCodeDir)" Importance="normal" />
+    <Message Text="目标目录: $(UnityRuntimeDir)" Importance="normal" />
+    
+    <!-- 复制所有 .cs 文件，保持目录结构 -->
+    <Copy
+      SourceFiles="@(SourceFiles)"
+      DestinationFiles="@(SourceFiles->'$(UnityRuntimeDir)%(RecursiveDir)%(Filename)%(Extension)')"
+      SkipUnchangedFiles="true" />
+    
+    <Message Text="源码复制完成！" Importance="high" />
+  </Target>
+
 </Project>

@@ -1,7 +1,4 @@
 <Solution>
   <Project Path="src/GenEvent.SourceGenerator/GenEvent.SourceGenerator.csproj" />
   <Project Path="src/GenEvent/GenEvent.csproj" />
-  <Project Path="src\GenEvent.Unity\Assembly-CSharp.csproj" Type="Classic C#">
-    <Configuration Solution="Release|Any CPU" Project="Debug|Any CPU" />
-  </Project>
 </Solution>

@@ -8,4 +8,27 @@
     <PackageReference Include="Microsoft.CodeAnalysis" Version="3.8.0" />
   </ItemGroup>
 
+  <!-- 定义目标目录 -->
+  <PropertyGroup>
+    <UnitySourceGeneratorDir>$(MSBuildProjectDirectory)\..\GenEvent.Unity\Assets\Plugins\GenEvent\Editor\SourceGenerator\</UnitySourceGeneratorDir>
+  </PropertyGroup>
+
+  <!-- 构建后复制 Source Generator 文件到 Unity Editor 目录 -->
+  <Target Name="CopySourceGeneratorToUnity" AfterTargets="Build">
+    <Message Text="正在复制 Source Generator 文件到 Unity Editor 目录..." Importance="high" />
+    <Message Text="源目录: $(OutputPath)" Importance="normal" />
+    <Message Text="目标目录: $(UnitySourceGeneratorDir)" Importance="normal" />
+    
+    <!-- 确保目标目录存在 -->
+    <MakeDir Directories="$(UnitySourceGeneratorDir)" Condition="!Exists('$(UnitySourceGeneratorDir)')" />
+    
+    <!-- 复制 .dll 文件 -->
+    <Copy
+      SourceFiles="$(OutputPath)$(AssemblyName).dll"
+      DestinationFolder="$(UnitySourceGeneratorDir)"
+      SkipUnchangedFiles="true" />
+    
+    <Message Text="Source Generator 文件复制完成！" Importance="high" />
+  </Target>
+
 </Project>
