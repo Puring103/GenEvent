@@ -58,6 +58,9 @@ namespace GenEvent
         public static TGenEvent WithFilter<TGenEvent>(this TGenEvent gameEvent, Predicate<object> filter)
             where TGenEvent : struct, IGenEvent<TGenEvent>
         {
+            if(filter== null) 
+                throw new ArgumentNullException(nameof(filter));
+            
             PublishConfig<TGenEvent>.Instance.AddFilter(filter);
             return gameEvent;
         }

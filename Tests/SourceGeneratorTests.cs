@@ -40,13 +40,19 @@ public class SourceGeneratorTests
         var primary = new PrimaryPrioritySubscriber();
         var high = new HighPrioritySubscriber();
         var medium = new MediumPrioritySubscriber();
+        var low = new LowPrioritySubscriber();
+        var end = new EndPrioritySubscriber();
         primary.StartListening();
         high.StartListening();
         medium.StartListening();
+        low.StartListening();
+        end.StartListening();
 
         new TestEventC { Value = 0 }.Publish();
 
         Assert.That(primary.CallOrder, Is.LessThan(high.CallOrder));
         Assert.That(high.CallOrder, Is.LessThan(medium.CallOrder));
+        Assert.That(medium.CallOrder, Is.LessThan(low.CallOrder));
+        Assert.That(low.CallOrder, Is.LessThan(end.CallOrder));
     }
 }

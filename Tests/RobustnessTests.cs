@@ -19,6 +19,13 @@ public class RobustnessTests
     }
 
     [Test]
+    public void WithFilter_Null_ThrowsArgumentNullException()
+    {
+        var evt = new TestEventA { Value = 1 };
+        Assert.Throws<ArgumentNullException>(() => evt.WithFilter(null!));
+    }
+
+    [Test]
     public void ExcludeSubscriber_Null_ThrowsArgumentNullException()
     {
         var evt = new TestEventA { Value = 1 };
@@ -81,6 +88,30 @@ public class RobustnessTests
             new TestEventA { Value = i }.Publish();
         }
         Assert.That(subscriber.ReceiveCount, Is.EqualTo(500));
+    }
+
+    [Test]
+    public void GC_AfterManySubscribeUnsubscribeAndPublish_NoLeakOrException()
+    {
+        GenEventBootstrap.Init();
+        for (int round = 0; round < 50; round++)
+        {
+            var subscriber = new SubscriberA();
+            subscriber.StartListening();
+            for (int i = 0; i < 100; i++)
+            {
+                new TestEventA { Value = i }.Publish();
+            }
+            subscriber.StopListening();
+        }
+        GC.Collect();
+        GC.WaitForPendingFinalizers();
+        GC.Collect();
+        // No exception and no assert failure; republish after GC to ensure state still valid
+        var sub = new SubscriberA();
+        sub.StartListening();
+        new TestEventA { Value = 1 }.Publish();
+        Assert.That(sub.ReceiveCount, Is.EqualTo(1));
     }
 
     private static void ClearBootstrapState()
