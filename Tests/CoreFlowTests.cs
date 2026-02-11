@@ -153,4 +153,43 @@ public class CoreFlowTests
         Assert.That(subA.ReceiveCount, Is.EqualTo(2));
         Assert.That(subB.ReceiveCount, Is.EqualTo(1), "Second publish should not have filter from first");
     }
+
+    /// <summary>
+    /// Outer Publish excludes subB; inner Publish (from republish subscriber) has no filter.
+    /// Verifies outer config is not overwritten: subB must receive only the inner event.
+    /// </summary>
+    [Test]
+    public void NestedPublish_OuterConfigNotOverwritten_InnerUsesOwnConfig()
+    {
+        var subRepub = new RepublishSameEventSubscriber();
+        var subB = new SubscriberB();
+        subRepub.StartListening();
+        subB.StartListening();
+
+        new TestEventA { Value = 1 }.ExcludeSubscriber(subB).Publish();
+
+        Assert.That(subRepub.ReceiveCount, Is.EqualTo(2), "Republish sub gets outer + inner");
+        Assert.That(subB.ReceiveCount, Is.EqualTo(1), "subB must get only inner; outer config excluded subB and was not overwritten by inner");
+    }
+
+    /// <summary>
+    /// Three-level nested Publish: L1 only NestedOuterSub, L2 only NestedMidSub, L3 no filter.
+    /// Verifies each level's config is preserved (not overwritten by inner levels).
+    /// </summary>
+    [Test]
+    public void NestedPublish_ThreeLevels_EachLevelConfigPreserved()
+    {
+        var outerSub = new NestedOuterSub();
+        var midSub = new NestedMidSub();
+        var innerSub = new NestedInnerSub();
+        outerSub.StartListening();
+        midSub.StartListening();
+        innerSub.StartListening();
+
+        new TestEventA { Value = 1 }.OnlyType<TestEventA, NestedOuterSub>().Publish();
+
+        Assert.That(outerSub.ReceiveCount, Is.EqualTo(2), "Outer sub: L1 + L3");
+        Assert.That(midSub.ReceiveCount, Is.EqualTo(2), "Mid sub: L2 + L3");
+        Assert.That(innerSub.ReceiveCount, Is.EqualTo(1), "Inner sub: L3 only");
+    }
 }

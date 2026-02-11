@@ -215,6 +215,47 @@ public class RepublishSameEventSubscriber
     }
 }
 
+// Multi-level nested: level 1 republishes with OnlyType<NestedMidSub>, level 2 republishes with no filter
+public class NestedOuterSub
+{
+    public int ReceiveCount;
+
+    [OnEvent]
+    public bool OnTestEventA(TestEventA e)
+    {
+        ReceiveCount++;
+        if (ReceiveCount == 1)
+            new TestEventA { Value = 2 }.OnlyType<TestEventA, NestedMidSub>().Publish();
+        return true;
+    }
+}
+
+public class NestedMidSub
+{
+    public int ReceiveCount;
+
+    [OnEvent]
+    public bool OnTestEventA(TestEventA e)
+    {
+        ReceiveCount++;
+        if (ReceiveCount == 1)
+            new TestEventA { Value = 3 }.Publish();
+        return true;
+    }
+}
+
+public class NestedInnerSub
+{
+    public int ReceiveCount;
+
+    [OnEvent]
+    public bool OnTestEventA(TestEventA e)
+    {
+        ReceiveCount++;
+        return true;
+    }
+}
+
 // Publish different event from within handler
 public class RepublishDifferentEventSubscriber
 {
