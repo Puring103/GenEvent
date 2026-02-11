@@ -6,11 +6,11 @@ namespace GenEvent
 {
     public static class EventCenter
     {
-        public static bool Publish<TGenEvent>(this TGenEvent gameEvent, object subscriber)
+        public static bool Publish<TGenEvent>(this TGenEvent gameEvent)
             where TGenEvent : struct, IGenEvent<TGenEvent>
         {
             var publisher = BaseEventPublisher.Publishers[typeof(TGenEvent)];
-            var result = publisher.Publish(gameEvent, subscriber);
+            var result = publisher.Publish(gameEvent);
             PublishConfig<TGenEvent>.Instance.Clear();
 
             return result;
@@ -131,42 +131,40 @@ namespace GenEvent
     public class PublishConfig<TGenEvent>
         where TGenEvent : struct, IGenEvent<TGenEvent>
     {
-        private bool _cancelable = false;
-        public bool Cancelable => _cancelable;
-        private List<Predicate<object>> _subscriberFilters { get; set; } = new(16);
+        public bool Cancelable { get; private set; } = false;
+        private List<Predicate<object>> SubscriberFilters { get; set; } = new(16);
 
-        private static PublishConfig<TGenEvent> instance;
-
+        private static PublishConfig<TGenEvent> _instance;
         public static PublishConfig<TGenEvent> Instance
         {
             get
             {
-                instance ??= new PublishConfig<TGenEvent>();
-                return instance;
+                _instance ??= new PublishConfig<TGenEvent>();
+                return _instance;
             }
         }
 
         public void Clear()
         {
-            _cancelable = false;
-            _subscriberFilters.Clear();
+            Cancelable = false;
+            SubscriberFilters.Clear();
         }
 
         public void SetCancelable()
         {
-            _cancelable = true;
+            Cancelable = true;
         }
 
         public void AddFilter(Predicate<object> filter)
         {
-            _subscriberFilters.Add(filter);
+            SubscriberFilters.Add(filter);
         }
 
         public bool IsFiltered(object subscriber)
         {
-            for (int i = 0; i < _subscriberFilters.Count; i++)
+            for (int i = 0; i < SubscriberFilters.Count; i++)
             {
-                if (_subscriberFilters[i](subscriber))
+                if (SubscriberFilters[i](subscriber))
                 {
                     return true;
                 }

@@ -10,7 +10,7 @@ namespace GenEvent
 [GeneratedCode(""GenEvent"",""V0.5"")]
 public class {EventName}Publisher : BaseEventPublisher
 {
-    public override bool Publish<TGenEvent>(TGenEvent @event, object emitter)
+    public override bool Publish<TGenEvent>(TGenEvent @event)
     {
         bool completed = true;
 

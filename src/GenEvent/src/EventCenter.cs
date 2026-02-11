@@ -6,11 +6,11 @@ namespace GenEvent
 {
     public static class EventCenter
     {
-        public static bool Publish<TGenEvent>(this TGenEvent gameEvent, object subscriber)
+        public static bool Publish<TGenEvent>(this TGenEvent gameEvent)
             where TGenEvent : struct, IGenEvent<TGenEvent>
         {
             var publisher = BaseEventPublisher.Publishers[typeof(TGenEvent)];
-            var result = publisher.Publish(gameEvent, subscriber);
+            var result = publisher.Publish(gameEvent);
             PublishConfig<TGenEvent>.Instance.Clear();
 
             return result;

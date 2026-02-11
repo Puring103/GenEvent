@@ -132,7 +132,7 @@ public class EventPerformanceTest : MonoBehaviour
 
         for (int i = 0; i < publishCount; i++)
         {
-            exampleEvent.Publish(this);
+            exampleEvent.Publish();
         }
 
         sw.Stop();
@@ -170,7 +170,7 @@ public class EventPerformanceTest : MonoBehaviour
 
         for (int i = 0; i < publishCount; i++)
         {
-            exampleEvent.Publish(this);
+            exampleEvent.Publish();
         }
 
         sw.Stop();
@@ -220,7 +220,7 @@ public class EventPerformanceTest : MonoBehaviour
 
         for (int i = 0; i < publishCount; i++)
         {
-            exampleEvent.Publish(this);
+            exampleEvent.Publish();
         }
 
         sw.Stop();
@@ -313,7 +313,7 @@ public class EventPerformanceTest : MonoBehaviour
     {
         for (int i = 0; i < publishCount; i++)
         {
-            _cachedExampleEvent.Publish(this);
+            _cachedExampleEvent.Publish();
         }
 
         if (logEachUpdate)
