@@ -26,19 +26,20 @@ namespace GenEvent.Runtime
             _subscribers.Remove(observer);
         }
 
-        public static bool Invoke(TGenEvent gameEvent, bool cancelable)
+        public static bool Invoke(TGenEvent gameEvent)
         {
             var completed = true;
 
             foreach (var subscriber in _subscribers)
             {
+                if(PublishConfig<TGenEvent>.Instance.IsFiltered(subscriber))
+                    continue;
+                
                 var shouldContinue = _genEvent?.Invoke(gameEvent, subscriber) ?? true;
 
-                if (cancelable && !shouldContinue)
-                {
-                    completed = false;
-                    break;
-                }
+                if (!PublishConfig<TGenEvent>.Instance.Cancelable || shouldContinue) continue;
+                completed = false;
+                break;
             }
 
             return completed;
