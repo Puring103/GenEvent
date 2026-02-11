@@ -1,25 +1,19 @@
 using System;
 
-namespace GenEvent
+namespace GenEvent;
+
+[AttributeUsage(AttributeTargets.Method, Inherited = false)]
+public class OnEventAttribute(SubscriberPriority priority = SubscriberPriority.Medium) : Attribute
 {
-    [AttributeUsage(AttributeTargets.Method, Inherited = false)]
-    public class OnEventAttribute : Attribute
-    {
-        public SubscriberPriority Priority { get; }
-
-        public OnEventAttribute(SubscriberPriority priority = SubscriberPriority.Medium)
-        {
-            Priority = priority;
-        }
-    }
+    public SubscriberPriority Priority { get; } = priority;
+}
 
 
-    public enum SubscriberPriority
-    {
-        Primary,
-        High,
-        Medium,
-        Low,
-        End
-    }
+public enum SubscriberPriority
+{
+    Primary,
+    High,
+    Medium,
+    Low,
+    End
 }

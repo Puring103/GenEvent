@@ -1,13 +1,12 @@
 using System;
 using System.Collections.Generic;
 
-namespace GenEvent.Interface
-{
-    public abstract partial class BaseEventPublisher
-    {
-        public static readonly Dictionary<Type, BaseEventPublisher> Publishers = new();
+namespace GenEvent.Interface;
 
-        public abstract bool Publish<TGenEvent>(TGenEvent @event)
-            where TGenEvent : struct, IGenEvent<TGenEvent>;
-    }
+public abstract class BaseEventPublisher
+{
+    public static readonly Dictionary<Type, BaseEventPublisher> Publishers = new();
+
+    public abstract bool Publish<TGenEvent>(TGenEvent @event)
+        where TGenEvent : struct, IGenEvent<TGenEvent>;
 }
