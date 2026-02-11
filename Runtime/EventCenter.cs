@@ -11,7 +11,7 @@ namespace GenEvent.Runtime
             var publisher = BaseEventPublisher.Publishers[typeof(TGenEvent)];
             var result = publisher != null && publisher.Publish(gameEvent, subscriber);
             PublishConfig<TGenEvent>.Instance.Clear();
-         
+
             return result;
         }
 
@@ -59,25 +59,46 @@ namespace GenEvent.Runtime
         {
             PublishConfig<TGenEvent>.Instance.AddFilter(filter);
         }
+
+        public static bool Invoke<TSubscriber, TGenEvent>(this TGenEvent gameEvent)
+            where TGenEvent : struct, IGenEvent<TGenEvent>
+            where TSubscriber : class
+        {
+            var completed = true;
+            var subscribers = GenEventRegistry<TGenEvent, TSubscriber>.Subscribers;
+            var genEvent = GenEventRegistry<TGenEvent, TSubscriber>.GenEvent;
+
+            for (int i = 0; i < subscribers.Count; i++)
+            {
+                var subscriber = subscribers[i];
+                if (PublishConfig<TGenEvent>.Instance.IsFiltered(subscriber))
+                    continue;
+
+                var shouldContinue = genEvent?.Invoke(gameEvent, subscriber) ?? true;
+
+                if (!PublishConfig<TGenEvent>.Instance.Cancelable || shouldContinue) continue;
+                completed = false;
+                break;
+            }
+
+            return completed;
+        }
     }
 
-    public class PublishConfig<TEvent>
-        where TEvent : struct, IGenEvent<TEvent>
+    public class PublishConfig<TGenEvent>
+        where TGenEvent : struct, IGenEvent<TGenEvent>
     {
         private bool _cancelable = false;
+        public bool Cancelable => _cancelable;
         private List<ISubscriberFilter> _subscriberFilters { get; set; } = new(1);
 
-        public bool Cancelable => _cancelable;
-        public IReadOnlyList<ISubscriberFilter> SubscriberFilters => _subscriberFilters;
+        private static PublishConfig<TGenEvent> instance;
 
-
-        private static PublishConfig<TEvent> instance;
-
-        public static PublishConfig<TEvent> Instance
+        public static PublishConfig<TGenEvent> Instance
         {
             get
             {
-                instance ??= new PublishConfig<TEvent>();
+                instance ??= new PublishConfig<TGenEvent>();
                 return instance;
             }
         }
@@ -100,9 +121,9 @@ namespace GenEvent.Runtime
 
         public bool IsFiltered(object subscriber)
         {
-            foreach (var subscriberFilter in Instance.SubscriberFilters)
+            for (int i = 0; i < Instance._subscriberFilters.Count; i++)
             {
-                if (subscriberFilter.IsFiltered(subscriber))
+                if (Instance._subscriberFilters[i].IsFiltered(subscriber))
                 {
                     return true;
                 }

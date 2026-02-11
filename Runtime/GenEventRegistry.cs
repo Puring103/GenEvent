@@ -11,6 +11,9 @@ namespace GenEvent.Runtime
         private static readonly List<TSubscriber> _subscribers = new();
         private static event GenEventDelegate<TGenEvent, TSubscriber> _genEvent;
 
+        public static IReadOnlyList<TSubscriber> Subscribers => _subscribers;
+        public static GenEventDelegate<TGenEvent, TSubscriber> GenEvent => _genEvent;
+
         public static void Initialize(GenEventDelegate<TGenEvent, TSubscriber> genEventDelegate)
         {
             _genEvent = genEventDelegate;
@@ -24,25 +27,6 @@ namespace GenEvent.Runtime
         public static void UnRegister(TSubscriber observer)
         {
             _subscribers.Remove(observer);
-        }
-
-        public static bool Invoke(TGenEvent gameEvent)
-        {
-            var completed = true;
-
-            foreach (var subscriber in _subscribers)
-            {
-                if(PublishConfig<TGenEvent>.Instance.IsFiltered(subscriber))
-                    continue;
-                
-                var shouldContinue = _genEvent?.Invoke(gameEvent, subscriber) ?? true;
-
-                if (!PublishConfig<TGenEvent>.Instance.Cancelable || shouldContinue) continue;
-                completed = false;
-                break;
-            }
-
-            return completed;
         }
     }
 }
