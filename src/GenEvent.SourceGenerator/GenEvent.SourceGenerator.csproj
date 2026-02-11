@@ -1,4 +1,4 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
     <TargetFramework>netstandard2.0</TargetFramework>
@@ -10,11 +10,6 @@
     <PackageReference Include="Microsoft.CodeAnalysis.CSharp" Version="3.8.0" />
   </ItemGroup>
 
-  <ItemGroup>
-    <EmbeddedResource Include="Templates\EventPublisher.cs.template" />
-    <EmbeddedResource Include="Templates\SubscriberRegistry.cs.template" />
-    <EmbeddedResource Include="Templates\Registration.cs.template" />
-  </ItemGroup>
 
   <!-- 定义目标目录 -->
   <PropertyGroup>

@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
@@ -9,610 +9,352 @@ using Microsoft.CodeAnalysis.Text;
 
 namespace GenEvent.SourceGenerator
 {
+    internal enum SubscriberPriority { Primary, High, Medium, Low, End }
+
     [Generator]
-    public sealed class GenEventSourceGenerator : ISourceGenerator
+    public class GenEventSourceGenerator : ISourceGenerator
     {
+        private const string IGenEventMetadataName = "GenEvent.Interface.IGenEvent`1";
+        private const string OnEventAttributeMetadataName = "GenEvent.OnEventAttribute";
+
         public void Initialize(GeneratorInitializationContext context)
         {
-            context.RegisterForSyntaxNotifications(() => new OnEventSyntaxReceiver());
         }
 
         public void Execute(GeneratorExecutionContext context)
         {
-            if (context.SyntaxReceiver is not OnEventSyntaxReceiver receiver)
+            try
             {
-                return;
-            }
+                var compilation = context.Compilation;
 
-            var compilation = context.Compilation;
+                var iGenEventSymbol = compilation.GetTypeByMetadataName(IGenEventMetadataName);
+                var onEventAttributeSymbol = compilation.GetTypeByMetadataName(OnEventAttributeMetadataName);
 
-            // locate core GenEvent types
-            var onEventAttributeSymbol = compilation.GetTypeByMetadataName("GenEvent.OnEventAttribute");
-            var iGenEventSymbol = compilation.GetTypeByMetadataName("GenEvent.Interface.IGenEvent`1");
-            var subscriberPrioritySymbol = compilation.GetTypeByMetadataName("GenEvent.SubscriberPriority");
-
-            if (onEventAttributeSymbol is null ||
-                iGenEventSymbol is null ||
-                subscriberPrioritySymbol is null)
-            {
-                // Without core types, we cannot generate anything meaningful.
-                return;
-            }
-
-            var priorityValues = BuildPriorityMap(subscriberPrioritySymbol);
-
-            // event type -> EventInfo
-            var events = new Dictionary<INamedTypeSymbol, EventInfo>(SymbolEqualityComparer.Default);
-            // subscriber type -> SubscriberInfo
-            var subscribers = new Dictionary<INamedTypeSymbol, SubscriberInfo>(SymbolEqualityComparer.Default);
-
-            var semanticModelCache = new Dictionary<SyntaxTree, SemanticModel>();
-            var iGenEventOriginal = iGenEventSymbol;
-
-            var index = 0;
-
-            foreach (var methodDecl in receiver.CandidateMethods)
-            {
-                var tree = methodDecl.SyntaxTree;
-                if (!semanticModelCache.TryGetValue(tree, out var model))
+                if (iGenEventSymbol == null)
                 {
-                    model = compilation.GetSemanticModel(tree);
-                    semanticModelCache[tree] = model;
+                    context.ReportDiagnostic(Diagnostic.Create(
+                        new DiagnosticDescriptor("GE001", "Missing type", "IGenEvent interface not found. Ensure GenEvent is referenced.", "GenEvent", DiagnosticSeverity.Warning, true),
+                        Location.None));
+                    return;
                 }
 
-                if (model.GetDeclaredSymbol(methodDecl) is not IMethodSymbol methodSymbol)
-                    continue;
+                if (onEventAttributeSymbol == null)
+                {
+                    context.ReportDiagnostic(Diagnostic.Create(
+                        new DiagnosticDescriptor("GE002", "Missing type", "OnEventAttribute not found. Ensure GenEvent is referenced.", "GenEvent", DiagnosticSeverity.Warning, true),
+                        Location.None));
+                    return;
+                }
 
-                var onEventData = methodSymbol.GetAttributes()
-                    .FirstOrDefault(a =>
-                        SymbolEqualityComparer.Default.Equals(a.AttributeClass, onEventAttributeSymbol));
+                var events = CollectEvents(compilation, iGenEventSymbol);
+                var (subscribers, diagnostics) = CollectSubscribers(compilation, onEventAttributeSymbol, context);
 
-                if (onEventData is null)
-                    continue;
+                foreach (var d in diagnostics)
+                    context.ReportDiagnostic(d);
 
-                AnalyzeOnEventMethod(
-                    context,
-                    methodDecl,
-                    methodSymbol,
-                    onEventData,
-                    iGenEventOriginal,
-                    priorityValues,
-                    events,
-                    subscribers,
-                    ref index);
+                if (events.Count == 0 && subscribers.Count == 0)
+                    return;
+
+                var eventToSubscribers = BuildEventSubscriberMap(subscribers);
+                var subscriberToEvents = BuildSubscriberEventMap(subscribers);
+
+                var eventPublisherTemplate = Templates.EventPublisher;
+                var subscriberRegistryTemplate = Templates.SubscriberRegistry;
+                var eventPublishersTemplate = Templates.EventPublishers;
+                var subscriberRegistrysTemplate = Templates.SubscriberRegistrys;
+
+                foreach (var evt in events)
+                {
+                    if (!eventToSubscribers.TryGetValue(evt.EventType, out var subList))
+                        subList = new List<SubscriberInfo>();
+                    var source = GenerateEventPublisher(evt, subList, eventPublisherTemplate);
+                    context.AddSource($"{evt.Name}Publisher.g.cs", SourceText.From(source, Encoding.UTF8));
+                }
+
+                foreach (var sub in subscribers.GroupBy(s => s.SubscriberType, SymbolEqualityComparer.Default).Select(g => g.First()))
+                {
+                    if (!subscriberToEvents.TryGetValue(sub.SubscriberType, out var evtList))
+                        evtList = new List<(INamedTypeSymbol EventType, string MethodName, bool ReturnsBool)>();
+                    var source = GenerateSubscriberRegistry(sub, evtList, subscriberRegistryTemplate);
+                    context.AddSource($"{sub.SubscriberType.Name}SubscriberRegistry.g.cs", SourceText.From(source, Encoding.UTF8));
+                }
+
+                var publisherRegistrations = string.Join(Environment.NewLine,
+                    events.Select(e => $"        Publishers[typeof({e.FullName})] = new {e.Name}Publisher();"));
+                var eventPublishersSource = eventPublishersTemplate
+                    .Replace("{PublisherRegistrations}", publisherRegistrations);
+                context.AddSource("EventPublishers.g.cs", SourceText.From(eventPublishersSource, Encoding.UTF8));
+
+                var subscriberRegs = subscribers.GroupBy(s => s.SubscriberType, SymbolEqualityComparer.Default);
+                var subscriberRegistrations = string.Join(Environment.NewLine,
+                    subscriberRegs.Select(g => $"        Subscribers[typeof({g.Key.ToDisplayString()})] = new {g.Key.Name}SubscriberRegistry();"));
+                var subscriberRegistrysSource = subscriberRegistrysTemplate
+                    .Replace("{SubscriberRegistrations}", subscriberRegistrations);
+                context.AddSource("SubscriberRegistrys.g.cs", SourceText.From(subscriberRegistrysSource, Encoding.UTF8));
             }
-
-            if (events.Count == 0)
+            catch (Exception ex)
             {
-                return;
+                context.ReportDiagnostic(Diagnostic.Create(
+                    new DiagnosticDescriptor("GE999", "Generator error", $"GenEvent source generator failed: {ex.Message}", "GenEvent", DiagnosticSeverity.Error, true),
+                    Location.None));
             }
-
-            GeneratePublisherSources(context, events);
-            GenerateSubscriberRegistrySources(context, subscribers);
-            GenerateBaseEventPublisherInitialization(context, events);
         }
 
-        #region Diagnostics
-
-        private const string DiagnosticCategory = "GenEvent";
-
-        private static readonly DiagnosticDescriptor GE001_OnEventMustBePublic = new(
-            id: "GE001",
-            title: "OnEvent method must be public instance method",
-            messageFormat: "[OnEvent] can only be applied to public instance methods.",
-            category: DiagnosticCategory,
-            defaultSeverity: DiagnosticSeverity.Error,
-            isEnabledByDefault: true,
-            description: "OnEvent methods must be public instance methods.");
-
-        private static readonly DiagnosticDescriptor GE002_OnEventMustHaveSingleParameter = new(
-            id: "GE002",
-            title: "OnEvent method must have exactly one parameter",
-            messageFormat: "[OnEvent] method must have exactly one parameter.",
-            category: DiagnosticCategory,
-            defaultSeverity: DiagnosticSeverity.Error,
-            isEnabledByDefault: true,
-            description: "OnEvent methods must declare exactly one parameter representing the event type.");
-
-        private static readonly DiagnosticDescriptor GE003_ParameterMustBeIGenEvent = new(
-            id: "GE003",
-            title: "OnEvent parameter type must be an IGenEvent struct",
-            messageFormat: "The parameter type of [OnEvent] must be a struct implementing IGenEvent<TSelf>.",
-            category: DiagnosticCategory,
-            defaultSeverity: DiagnosticSeverity.Error,
-            isEnabledByDefault: true,
-            description: "OnEvent parameter type must be a struct implementing IGenEvent<TSelf>.");
-
-        private static readonly DiagnosticDescriptor GE004_DuplicateOnEventInSameSubscriber = new(
-            id: "GE004",
-            title: "Duplicate OnEvent for same event in subscriber",
-            messageFormat: "A subscriber class cannot contain more than one [OnEvent] method for the same event type.",
-            category: DiagnosticCategory,
-            defaultSeverity: DiagnosticSeverity.Error,
-            isEnabledByDefault: true,
-            description: "A subscriber class cannot contain more than one [OnEvent] method for the same event type.");
-
-        private static readonly DiagnosticDescriptor GE005_UnsupportedReturnType = new(
-            id: "GE005",
-            title: "Unsupported OnEvent return type",
-            messageFormat: "[OnEvent] methods must return void or bool.",
-            category: DiagnosticCategory,
-            defaultSeverity: DiagnosticSeverity.Error,
-            isEnabledByDefault: true,
-            description: "OnEvent methods must return void or bool.");
-
-        #endregion
-
-        #region Model
-
-        private sealed class HandlerInfo
+        private static List<EventInfo> CollectEvents(Compilation compilation, INamedTypeSymbol iGenEventSymbol)
         {
-            public HandlerInfo(IMethodSymbol method, int priority, int order)
+            var result = new List<EventInfo>();
+            var iGenEventInterface = iGenEventSymbol.ConstructUnboundGenericType();
+            var visitor = new EventCollector(compilation, result);
+            foreach (var tree in compilation.SyntaxTrees)
             {
-                Method = method;
-                Priority = priority;
-                Order = order;
-                ReturnsBool = !method.ReturnsVoid &&
-                              method.ReturnType.SpecialType == SpecialType.System_Boolean;
+                var model = compilation.GetSemanticModel(tree);
+                visitor.Visit(tree.GetRoot(), model);
             }
-
-            public IMethodSymbol Method { get; }
-            public int Priority { get; }
-            public int Order { get; }
-            public bool ReturnsBool { get; }
+            return result;
         }
 
-        private sealed class SubscriberInfo
+        private static (List<SubscriberInfo> subscribers, List<Diagnostic> diagnostics) CollectSubscribers(
+            Compilation compilation, INamedTypeSymbol onEventAttributeSymbol, GeneratorExecutionContext context)
         {
-            public SubscriberInfo(INamedTypeSymbol symbol)
+            var subscribers = new List<SubscriberInfo>();
+            var diagnostics = new List<Diagnostic>();
+            var eventMethodsByClass = new Dictionary<INamedTypeSymbol, Dictionary<INamedTypeSymbol, (IMethodSymbol method, Location loc)>>(SymbolEqualityComparer.Default);
+
+            foreach (var tree in compilation.SyntaxTrees)
             {
-                Symbol = symbol;
+                var root = tree.GetRoot();
+                var model = compilation.GetSemanticModel(tree);
+
+                var methodDeclarations = root.DescendantNodes().OfType<MethodDeclarationSyntax>();
+
+                foreach (var methodDecl in methodDeclarations)
+                {
+                    var methodSymbol = model.GetDeclaredSymbol(methodDecl, context.CancellationToken) as IMethodSymbol;
+                    if (methodSymbol == null) continue;
+
+                    var onEventAttr = methodSymbol.GetAttributes()
+                        .FirstOrDefault(a => SymbolEqualityComparer.Default.Equals(a.AttributeClass, onEventAttributeSymbol));
+                    if (onEventAttr == null) continue;
+
+                    if (methodSymbol.DeclaredAccessibility != Accessibility.Public)
+                    {
+                        diagnostics.Add(Diagnostic.Create(
+                            new DiagnosticDescriptor("GE010", "Invalid OnEvent", "[OnEvent] methods must be public.", "GenEvent", DiagnosticSeverity.Error, true),
+                            methodDecl.GetLocation()));
+                        continue;
+                    }
+
+                    if (methodSymbol.Parameters.Length != 1)
+                    {
+                        diagnostics.Add(Diagnostic.Create(
+                            new DiagnosticDescriptor("GE011", "Invalid OnEvent", "[OnEvent] methods must have exactly one parameter (the event type).", "GenEvent", DiagnosticSeverity.Error, true),
+                            methodDecl.GetLocation()));
+                        continue;
+                    }
+
+                    var paramType = methodSymbol.Parameters[0].Type as INamedTypeSymbol;
+                    if (paramType == null || !ImplementsIGenEvent(paramType, compilation))
+                    {
+                        diagnostics.Add(Diagnostic.Create(
+                            new DiagnosticDescriptor("GE012", "Invalid OnEvent", "[OnEvent] method parameter must be an IGenEvent type.", "GenEvent", DiagnosticSeverity.Error, true),
+                            methodDecl.GetLocation()));
+                        continue;
+                    }
+
+                    var containingType = methodSymbol.ContainingType;
+                    if (containingType == null || containingType.TypeKind != TypeKind.Class)
+                        continue;
+
+                    if (!eventMethodsByClass.TryGetValue(containingType, out var eventDict))
+                        eventMethodsByClass[containingType] = eventDict = new Dictionary<INamedTypeSymbol, (IMethodSymbol, Location)>(SymbolEqualityComparer.Default);
+
+                    if (eventDict.TryGetValue(paramType, out var existing))
+                    {
+                        diagnostics.Add(Diagnostic.Create(
+                            new DiagnosticDescriptor("GE013", "Duplicate OnEvent", "A class can only have one [OnEvent] method per event type.", "GenEvent", DiagnosticSeverity.Error, true),
+                            methodDecl.GetLocation()));
+                        continue;
+                    }
+                    eventDict[paramType] = (methodSymbol, methodDecl.GetLocation());
+
+                    var priority = SubscriberPriority.Medium;
+                    if (onEventAttr.ConstructorArguments.Length > 0 &&
+                        onEventAttr.ConstructorArguments[0].Value is int priorityVal)
+                    {
+                        priority = (SubscriberPriority)priorityVal;
+                    }
+
+                    subscribers.Add(new SubscriberInfo
+                    {
+                        SubscriberType = containingType,
+                        Method = methodSymbol,
+                        EventType = paramType,
+                        Priority = priority
+                    });
+                }
             }
 
-            public INamedTypeSymbol Symbol { get; }
-
-            // event type -> handler
-            public Dictionary<INamedTypeSymbol, HandlerInfo> HandlersByEvent { get; } =
-                new(SymbolEqualityComparer.Default);
+            return (subscribers, diagnostics);
         }
 
-        private sealed class EventInfo
+        private static bool ImplementsIGenEvent(INamedTypeSymbol type, Compilation compilation)
         {
-            public EventInfo(INamedTypeSymbol symbol)
-            {
-                Symbol = symbol;
-            }
+            var iGenEvent = compilation.GetTypeByMetadataName(IGenEventMetadataName);
+            if (iGenEvent == null) return false;
 
-            public INamedTypeSymbol Symbol { get; }
-
-            // all (subscriber, handler) for this event
-            public List<(SubscriberInfo Subscriber, HandlerInfo Handler)> Handlers { get; } = new();
+            var constructed = iGenEvent.Construct(type);
+            return type.AllInterfaces.Any(i => SymbolEqualityComparer.Default.Equals(i.OriginalDefinition, iGenEvent));
         }
 
-        #endregion
-
-        #region Analysis
-
-        private static Dictionary<string, int> BuildPriorityMap(INamedTypeSymbol subscriberPrioritySymbol)
+        private static Dictionary<INamedTypeSymbol, List<SubscriberInfo>> BuildEventSubscriberMap(List<SubscriberInfo> subscribers)
         {
-            var map = new Dictionary<string, int>(StringComparer.Ordinal);
-
-            foreach (var member in subscriberPrioritySymbol.GetMembers().OfType<IFieldSymbol>())
+            var map = new Dictionary<INamedTypeSymbol, List<SubscriberInfo>>(SymbolEqualityComparer.Default);
+            foreach (var s in subscribers)
             {
-                if (!member.HasConstantValue || member.ConstantValue is not int value)
-                    continue;
-
-                map[member.Name] = value;
+                if (!map.TryGetValue(s.EventType, out var list))
+                    map[s.EventType] = list = new List<SubscriberInfo>();
+                list.Add(s);
             }
-
+            foreach (var list in map.Values)
+            {
+                list.Sort((a, b) => ((int)a.Priority).CompareTo((int)b.Priority));
+            }
             return map;
         }
 
-        private static void AnalyzeOnEventMethod(
-            GeneratorExecutionContext context,
-            MethodDeclarationSyntax methodDecl,
-            IMethodSymbol methodSymbol,
-            AttributeData onEventData,
-            INamedTypeSymbol iGenEventSymbol,
-            Dictionary<string, int> priorityValues,
-            Dictionary<INamedTypeSymbol, EventInfo> events,
-            Dictionary<INamedTypeSymbol, SubscriberInfo> subscribers,
-            ref int index)
+        private static Dictionary<INamedTypeSymbol, List<(INamedTypeSymbol EventType, string MethodName, bool ReturnsBool)>> BuildSubscriberEventMap(List<SubscriberInfo> subscribers)
         {
-            // Must be instance, public
-            if (methodSymbol.IsStatic || methodSymbol.DeclaredAccessibility != Accessibility.Public)
+            var map = new Dictionary<INamedTypeSymbol, List<(INamedTypeSymbol, string, bool)>>(SymbolEqualityComparer.Default);
+            foreach (var s in subscribers)
             {
-                context.ReportDiagnostic(Diagnostic.Create(
-                    GE001_OnEventMustBePublic,
-                    methodDecl.Identifier.GetLocation()));
-                return;
+                if (!map.TryGetValue(s.SubscriberType, out var list))
+                    map[s.SubscriberType] = list = new List<(INamedTypeSymbol, string, bool)>();
+                list.Add((s.EventType, s.Method.Name, s.Method.ReturnType.SpecialType == SpecialType.System_Boolean));
             }
-
-            // Exactly one parameter
-            if (methodSymbol.Parameters.Length != 1)
-            {
-                context.ReportDiagnostic(Diagnostic.Create(
-                    GE002_OnEventMustHaveSingleParameter,
-                    methodDecl.Identifier.GetLocation()));
-                return;
-            }
-
-            var param = methodSymbol.Parameters[0];
-            var eventType = param.Type as INamedTypeSymbol;
-
-            if (!IsValidEventType(eventType, iGenEventSymbol))
-            {
-                context.ReportDiagnostic(Diagnostic.Create(
-                    GE003_ParameterMustBeIGenEvent,
-                    methodDecl.ParameterList.Parameters[0].GetLocation()));
-                return;
-            }
-
-            // Return type must be void or bool
-            if (!methodSymbol.ReturnsVoid &&
-                methodSymbol.ReturnType.SpecialType != SpecialType.System_Boolean)
-            {
-                context.ReportDiagnostic(Diagnostic.Create(
-                    GE005_UnsupportedReturnType,
-                    methodDecl.ReturnType.GetLocation()));
-                return;
-            }
-
-            // Subscriber type
-            if (methodSymbol.ContainingType is not INamedTypeSymbol subscriberType)
-            {
-                return;
-            }
-
-            if (!subscribers.TryGetValue(subscriberType, out var subscriberInfo))
-            {
-                subscriberInfo = new SubscriberInfo(subscriberType);
-                subscribers[subscriberType] = subscriberInfo;
-            }
-
-            // One OnEvent per (subscriber, event)
-            if (subscriberInfo.HandlersByEvent.ContainsKey(eventType!))
-            {
-                context.ReportDiagnostic(Diagnostic.Create(
-                    GE004_DuplicateOnEventInSameSubscriber,
-                    methodDecl.Identifier.GetLocation()));
-                return;
-            }
-
-            var priority = GetPriorityValue(onEventData, priorityValues);
-
-            var handlerInfo = new HandlerInfo(methodSymbol, priority, index++);
-
-            subscriberInfo.HandlersByEvent[eventType!] = handlerInfo;
-
-            if (!events.TryGetValue(eventType!, out var eventInfo))
-            {
-                eventInfo = new EventInfo(eventType!);
-                events[eventType!] = eventInfo;
-            }
-
-            eventInfo.Handlers.Add((subscriberInfo, handlerInfo));
+            return map;
         }
 
-        private static bool IsValidEventType(INamedTypeSymbol? eventType, INamedTypeSymbol iGenEventSymbol)
+        private static string GenerateEventPublisher(EventInfo evt, IReadOnlyList<SubscriberInfo> subscriberList, string template)
         {
-            if (eventType is null)
-                return false;
-
-            if (eventType.TypeKind != TypeKind.Struct)
-                return false;
-
-            foreach (var iface in eventType.AllInterfaces)
+            var usings = CollectUsings(evt.EventType, subscriberList.Select(s => s.SubscriberType));
+            var invocations = new StringBuilder();
+            foreach (var sub in subscriberList)
             {
-                if (!SymbolEqualityComparer.Default.Equals(iface.OriginalDefinition, iGenEventSymbol))
-                    continue;
-
-                if (iface.TypeArguments.Length != 1)
-                    continue;
-
-                if (SymbolEqualityComparer.Default.Equals(iface.TypeArguments[0], eventType))
-                {
-                    return true;
-                }
+                invocations.AppendLine($"        completed = @event.Invoke<{sub.SubscriberType.ToDisplayString()}, TGenEvent>();");
+                invocations.AppendLine("        if (!completed) return false;");
+                invocations.AppendLine();
             }
 
-            return false;
+            return template
+                .Replace("{UsingNamespaces}", usings)
+                .Replace("{EventName}", evt.Name)
+                .Replace("{EventFullName}", evt.FullName)
+                .Replace("{SubscriberInvocations}", invocations.ToString().TrimEnd());
         }
 
-        private static int GetPriorityValue(AttributeData attributeData, Dictionary<string, int> priorityValues)
+        private static string GenerateSubscriberRegistry(SubscriberInfo sub,
+            IReadOnlyList<(INamedTypeSymbol EventType, string MethodName, bool ReturnsBool)> subscriberEvents,
+            string template)
         {
-            if (attributeData.ConstructorArguments.Length == 1 &&
-                attributeData.ConstructorArguments[0].Value is int v)
+            var events = subscriberEvents.Count > 0
+                ? subscriberEvents
+                : new List<(INamedTypeSymbol, string, bool)> { (sub.EventType, sub.Method.Name, sub.Method.ReturnType.SpecialType == SpecialType.System_Boolean) };
+
+            var usings = CollectUsings(sub.SubscriberType, events.Select(e => e.EventType));
+            var eventRegistrations = new StringBuilder();
+            var startCalls = new StringBuilder();
+            var stopCalls = new StringBuilder();
+
+            foreach (var (eventType, methodName, returnsBool) in events)
             {
-                return v;
+                var returnExpr = returnsBool ? "return subscriber." + methodName + "(gameEvent);" : "subscriber." + methodName + "(gameEvent); return true;";
+                eventRegistrations.AppendLine($"        GenEventRegistry<{eventType.ToDisplayString()}, {sub.SubscriberType.ToDisplayString()}>.Initialize((gameEvent, subscriber) =>");
+                eventRegistrations.AppendLine("        {");
+                eventRegistrations.AppendLine($"            {returnExpr}");
+                eventRegistrations.AppendLine("        });");
+                eventRegistrations.AppendLine();
+
+                startCalls.AppendLine($"        StartListening<TSubscriber, {eventType.ToDisplayString()}>(self);");
+                stopCalls.AppendLine($"        StopListening<TSubscriber, {eventType.ToDisplayString()}>(self);");
             }
 
-            // Fallback to Medium if available
-            if (priorityValues.TryGetValue("Medium", out var medium))
-            {
-                return medium;
-            }
-
-            return 0;
+            return template
+                .Replace("{UsingNamespaces}", usings)
+                .Replace("{SubscriberName}", sub.SubscriberType.Name)
+                .Replace("{SubscriberFullName}", sub.SubscriberType.ToDisplayString())
+                .Replace("{EventRegistrations}", eventRegistrations.ToString().TrimEnd())
+                .Replace("{StartListeningCalls}", startCalls.ToString().TrimEnd())
+                .Replace("{StopListeningCalls}", stopCalls.ToString().TrimEnd());
         }
 
-        #endregion
-
-        #region Generation - Publishers
-
-        private static void GeneratePublisherSources(
-            GeneratorExecutionContext context,
-            Dictionary<INamedTypeSymbol, EventInfo> events)
+        private static string CollectUsings(INamedTypeSymbol primary, IEnumerable<INamedTypeSymbol> additional)
         {
-            foreach (var kvp in events)
+            var namespaces = new HashSet<string> { "GenEvent", "GenEvent.Interface" };
+            if (primary != null && !string.IsNullOrEmpty(primary.ContainingNamespace?.ToDisplayString()))
+                namespaces.Add(primary.ContainingNamespace.ToDisplayString());
+            foreach (var sym in additional)
             {
-                var eventSymbol = kvp.Key;
-                var eventInfo = kvp.Value;
+                if (sym != null && !string.IsNullOrEmpty(sym.ContainingNamespace?.ToDisplayString()))
+                    namespaces.Add(sym.ContainingNamespace.ToDisplayString());
+            }
+            var usings = namespaces.OrderBy(n => n).Select(n => $"using {n};").ToList();
+            return string.Join(Environment.NewLine, usings);
+        }
 
-                var orderedHandlers = eventInfo.Handlers
-                    .OrderBy(h => h.Handler.Priority)
-                    .ThenBy(h => h.Handler.Order)
-                    .ToList();
+        private struct EventInfo
+        {
+            public INamedTypeSymbol EventType;
+            public string Name;
+            public string FullName;
+        }
 
-                var eventFullName = eventSymbol.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
-                var publisherClassName = eventSymbol.Name + "Publisher";
-                var @namespace = "GenEvent.Generated";
+        private struct SubscriberInfo
+        {
+            public INamedTypeSymbol SubscriberType { get; set; }
+            public IMethodSymbol Method { get; set; }
+            public INamedTypeSymbol EventType { get; set; }
+            public SubscriberPriority Priority { get; set; }
+        }
 
-                var sb = new StringBuilder();
+        private class EventCollector : CSharpSyntaxWalker
+        {
+            private readonly Compilation _compilation;
+            private readonly List<EventInfo> _result;
+            private SemanticModel _model = null!;
 
-                sb.AppendLine("// <auto-generated />");
-                sb.AppendLine("// This file is generated by GenEventSourceGenerator. Do not edit manually.");
-                sb.AppendLine("using System;");
-                sb.AppendLine("using GenEvent;");
-                sb.AppendLine("using GenEvent.Interface;");
-                sb.AppendLine();
-                sb.AppendLine($"namespace {@namespace}");
-                sb.AppendLine("{");
-                sb.AppendLine($"    internal sealed class {publisherClassName} : BaseEventPublisher");
-                sb.AppendLine("    {");
-                sb.AppendLine("        public override bool Publish<TGenEvent>(TGenEvent @event, object emitter)");
-                sb.AppendLine("        {");
-                sb.AppendLine($"            if (typeof(TGenEvent) != typeof({eventFullName}))");
-                sb.AppendLine("            {");
-                sb.AppendLine("                return true;");
-                sb.AppendLine("            }");
-                sb.AppendLine();
-                sb.AppendLine($"            var gameEvent = ({eventFullName})(object)@event;");
-                sb.AppendLine($"            var cancelable = PublishConfig<{eventFullName}>.Instance.Cancelable;");
-                sb.AppendLine();
+            public EventCollector(Compilation compilation, List<EventInfo> result)
+            {
+                _compilation = compilation;
+                _result = result;
+            }
 
-                if (orderedHandlers.Count == 0)
+            public void Visit(SyntaxNode node, SemanticModel model)
+            {
+                _model = model;
+                Visit(node);
+            }
+
+            public override void VisitStructDeclaration(StructDeclarationSyntax node)
+            {
+                var symbol = _model.GetDeclaredSymbol(node, default);
+                if (symbol is INamedTypeSymbol named && ImplementsIGenEvent(named, _compilation))
                 {
-                    sb.AppendLine("            return true;");
-                }
-                else
-                {
-                    sb.AppendLine("            if (cancelable)");
-                    sb.AppendLine("            {");
-                    foreach (var (subscriber, _) in orderedHandlers)
+                    _result.Add(new EventInfo
                     {
-                        var subscriberFullName =
-                            subscriber.Symbol.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
-                        sb.AppendLine(
-                            $"                if (!gameEvent.Invoke<{subscriberFullName}, {eventFullName}>())");
-                        sb.AppendLine("                {");
-                        sb.AppendLine("                    return false;");
-                        sb.AppendLine("                }");
-                    }
-
-                    sb.AppendLine("            }");
-                    sb.AppendLine("            else");
-                    sb.AppendLine("            {");
-                    foreach (var (subscriber, _) in orderedHandlers)
-                    {
-                        var subscriberFullName =
-                            subscriber.Symbol.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
-                        sb.AppendLine($"                gameEvent.Invoke<{subscriberFullName}, {eventFullName}>();");
-                    }
-
-                    sb.AppendLine("            }");
-                    sb.AppendLine();
-                    sb.AppendLine("            return true;");
+                        EventType = named,
+                        Name = named.Name,
+                        FullName = named.ToDisplayString()
+                    });
                 }
+                base.VisitStructDeclaration(node);
+            }
 
-                sb.AppendLine("        }");
-                sb.AppendLine("    }");
-                sb.AppendLine("}");
-
-                var hintName = SanitizeFileName(publisherClassName) + ".g.cs";
-                context.AddSource(hintName, SourceText.From(sb.ToString(), Encoding.UTF8));
+            private static bool ImplementsIGenEvent(INamedTypeSymbol type, Compilation compilation)
+            {
+                var iGenEvent = compilation.GetTypeByMetadataName(IGenEventMetadataName);
+                if (iGenEvent == null) return false;
+                return type.AllInterfaces.Any(i => SymbolEqualityComparer.Default.Equals(i.OriginalDefinition, iGenEvent));
             }
         }
-
-        #endregion
-
-        #region Generation - Subscriber Registries
-
-        private static void GenerateSubscriberRegistrySources(
-            GeneratorExecutionContext context,
-            Dictionary<INamedTypeSymbol, SubscriberInfo> subscribers)
-        {
-            foreach (var kvp in subscribers)
-            {
-                var subscriberInfo = kvp.Value;
-
-                if (subscriberInfo.HandlersByEvent.Count == 0)
-                    continue;
-
-                var subscriberSymbol = subscriberInfo.Symbol;
-                var subscriberFullName = subscriberSymbol.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
-                var registryClassName = subscriberSymbol.Name + "SubscriberRegistry";
-                var @namespace = "GenEvent.Generated";
-
-                var sb = new StringBuilder();
-
-                sb.AppendLine("// <auto-generated />");
-                sb.AppendLine("// This file is generated by GenEventSourceGenerator. Do not edit manually.");
-                sb.AppendLine("using System;");
-                sb.AppendLine("using GenEvent;");
-                sb.AppendLine("using GenEvent.Interface;");
-                sb.AppendLine();
-                sb.AppendLine($"namespace {@namespace}");
-                sb.AppendLine("{");
-                sb.AppendLine($"    internal sealed class {registryClassName} : BaseSubscriberRegistry");
-                sb.AppendLine("    {");
-                sb.AppendLine("        public override void StartListening<TSubscriber>(TSubscriber self)");
-                sb.AppendLine("            where TSubscriber : class");
-                sb.AppendLine("        {");
-                sb.AppendLine($"            if (self is not {subscriberFullName} typed)");
-                sb.AppendLine("            {");
-                sb.AppendLine("                return;");
-                sb.AppendLine("            }");
-
-                foreach (var eventKvp in subscriberInfo.HandlersByEvent)
-                {
-                    var eventFullName = eventKvp.Key.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
-                    sb.AppendLine(
-                        $"            BaseSubscriberRegistry.StartListening<{subscriberFullName}, {eventFullName}>(typed);");
-                }
-
-                sb.AppendLine("        }");
-                sb.AppendLine();
-                sb.AppendLine("        public override void StopListening<TSubscriber>(TSubscriber self)");
-                sb.AppendLine("            where TSubscriber : class");
-                sb.AppendLine("        {");
-                sb.AppendLine($"            if (self is not {subscriberFullName} typed)");
-                sb.AppendLine("            {");
-                sb.AppendLine("                return;");
-                sb.AppendLine("            }");
-
-                foreach (var eventKvp in subscriberInfo.HandlersByEvent)
-                {
-                    var eventFullName = eventKvp.Key.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
-                    sb.AppendLine(
-                        $"            BaseSubscriberRegistry.StopListening<{subscriberFullName}, {eventFullName}>(typed);");
-                }
-
-                sb.AppendLine("        }");
-                sb.AppendLine("    }");
-                sb.AppendLine("}");
-
-                var hintName = SanitizeFileName(registryClassName) + ".g.cs";
-                context.AddSource(hintName, SourceText.From(sb.ToString(), Encoding.UTF8));
-            }
-        }
-
-        #endregion
-
-        #region Generation - BaseEventPublisher partial init
-
-        private static void GenerateBaseEventPublisherInitialization(
-            GeneratorExecutionContext context,
-            Dictionary<INamedTypeSymbol, EventInfo> events)
-        {
-            var sb = new StringBuilder();
-
-            sb.AppendLine("// <auto-generated />");
-            sb.AppendLine("// This file is generated by GenEventSourceGenerator. Do not edit manually.");
-            sb.AppendLine("using System;");
-            sb.AppendLine("using GenEvent;");
-            sb.AppendLine("using GenEvent.Interface;");
-            sb.AppendLine();
-            sb.AppendLine("namespace GenEvent.Interface");
-            sb.AppendLine("{");
-            sb.AppendLine("    public abstract partial class BaseEventPublisher");
-            sb.AppendLine("    {");
-            sb.AppendLine("        static BaseEventPublisher()");
-            sb.AppendLine("        {");
-
-            // Register publishers
-            foreach (var kvp in events)
-            {
-                var eventSymbol = kvp.Key;
-                var eventFullName = eventSymbol.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
-                var publisherClassName = eventSymbol.Name + "Publisher";
-
-                sb.AppendLine(
-                    $"            Publishers[typeof({eventFullName})] = new GenEvent.Generated.{publisherClassName}();");
-            }
-
-            sb.AppendLine();
-
-            // Initialize GenEventRegistry delegates
-            foreach (var kvp in events)
-            {
-                var eventSymbol = kvp.Key;
-                var eventInfo = kvp.Value;
-                var eventFullName = eventSymbol.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
-
-                foreach (var (subscriber, handler) in eventInfo.Handlers
-                             .OrderBy(h => h.Handler.Priority)
-                             .ThenBy(h => h.Handler.Order))
-                {
-                    var subscriberFullName =
-                        subscriber.Symbol.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
-                    var methodName = handler.Method.Name;
-
-                    sb.AppendLine(
-                        $"            GenEventRegistry<{eventFullName}, {subscriberFullName}>.Initialize((ev, sub) =>");
-                    sb.AppendLine("            {");
-                    sb.AppendLine("                bool continuePropagation = true;");
-
-                    if (handler.ReturnsBool)
-                    {
-                        sb.AppendLine("                if (continuePropagation)");
-                        sb.AppendLine("                {");
-                        sb.AppendLine($"                    continuePropagation = sub.{methodName}(ev);");
-                        sb.AppendLine("                }");
-                    }
-                    else
-                    {
-                        sb.AppendLine("                if (continuePropagation)");
-                        sb.AppendLine("                {");
-                        sb.AppendLine($"                    sub.{methodName}(ev);");
-                        sb.AppendLine("                }");
-                    }
-
-                    sb.AppendLine("                return continuePropagation;");
-                    sb.AppendLine("            });");
-                }
-            }
-
-            sb.AppendLine("        }");
-            sb.AppendLine("    }");
-            sb.AppendLine("}");
-
-            context.AddSource("BaseEventPublisher.Init.g.cs", SourceText.From(sb.ToString(), Encoding.UTF8));
-        }
-
-        #endregion
-
-        #region Helpers
-
-        private static string SanitizeFileName(string name)
-        {
-            var invalid = System.IO.Path.GetInvalidFileNameChars();
-            var chars = name.ToCharArray();
-            for (var i = 0; i < chars.Length; i++)
-            {
-                if (Array.IndexOf(invalid, chars[i]) >= 0)
-                {
-                    chars[i] = '_';
-                }
-            }
-
-            return new string(chars);
-        }
-
-        private sealed class OnEventSyntaxReceiver : ISyntaxReceiver
-        {
-            public List<MethodDeclarationSyntax> CandidateMethods { get; } = new();
-
-            public void OnVisitSyntaxNode(SyntaxNode syntaxNode)
-            {
-                if (syntaxNode is MethodDeclarationSyntax method &&
-                    method.AttributeLists.Count > 0)
-                {
-                    CandidateMethods.Add(method);
-                }
-            }
-        }
-
-        #endregion
     }
 }
