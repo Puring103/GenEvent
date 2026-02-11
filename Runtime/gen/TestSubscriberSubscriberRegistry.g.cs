@@ -1,9 +1,10 @@
-﻿using GenEvent.Runtime;
-using GenEvent.Runtime.example;
-
-public class TestSubscriberRegistry : BaseSubscriberRegistry
+﻿using GenEvent.Runtime.example;
+using GenEvent.Runtime;
+using System.CodeDom.Compiler;
+[GeneratedCode("GenEvent","V0.5")]
+public class TestSubscriberSubscriberRegistry : BaseSubscriberRegistry
 {
-    static TestSubscriberRegistry()
+    static TestSubscriberSubscriberRegistry()
     {
         GenEventRegistry<ExampleEvent, TestSubscriber>.Initialize((gameEvent, subscriber) =>
         {
@@ -11,23 +12,19 @@ public class TestSubscriberRegistry : BaseSubscriberRegistry
             return true;
         });
 
-        GenEventRegistry<ExampleEvent2, TestSubscriber>.Initialize((gameEvent, subscriber) =>
-        {
-            return subscriber.OnEvent3(gameEvent);
-        });
     }
 
     public override void StartListening<TSubscriber>(TSubscriber self)
         where TSubscriber : class
     {
         StartListening<TSubscriber, ExampleEvent>(self);
-        StartListening<TSubscriber, ExampleEvent2>(self);
+
     }
 
     public override void StopListening<TSubscriber>(TSubscriber self)
         where TSubscriber : class
     {
         StopListening<TSubscriber, ExampleEvent>(self);
-        StopListening<TSubscriber, ExampleEvent2>(self);
+
     }
 }
