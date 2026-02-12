@@ -1,7 +1,7 @@
 using GenEvent;
 using GenEvent.Interface;
 
-namespace GenEvent.Tests;
+namespace Tests;
 
 /// <summary>
 /// Source generator / bootstrap: publishers registered, subscriber registries work, priority order.

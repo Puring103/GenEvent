@@ -2,116 +2,172 @@ using System;
 using System.Collections.Generic;
 using GenEvent.Interface;
 
-namespace GenEvent;
-
-public class PublishConfig<TGenEvent>
-    where TGenEvent : struct, IGenEvent<TGenEvent>
+namespace GenEvent
 {
-    private const int PoolCapacity = 16;
-
-    public bool Cancelable { get; private set; }
-    private List<Predicate<object>> SubscriberFilters { get; } = new(16);
-
-    private static PublishConfig<TGenEvent> _instance;
-    private static PublishConfig<TGenEvent> _mainInstance;
-    private static readonly Stack<PublishConfig<TGenEvent>> Stack = new(PoolCapacity);
-    private static readonly List<PublishConfig<TGenEvent>> Pool = new(PoolCapacity);
-
-    public static PublishConfig<TGenEvent> Instance
+    /// <summary>
+    /// Configuration for event publishing.
+    /// </summary>
+    /// <typeparam name="TGenEvent">The event type.</typeparam>
+    public class PublishConfig<TGenEvent>
+        where TGenEvent : struct, IGenEvent<TGenEvent>
     {
-        get
+        private const int PoolCapacity = 16;
+
+        /// <summary>
+        /// Whether the event is cancelable.
+        /// </summary>
+        public bool Cancelable { get; private set; }
+
+        /// <summary>
+        /// List of subscriber filters, used to filter subscribers before publishing the event.
+        /// </summary>
+        private List<Predicate<object>> SubscriberFilters { get; } = new(16);
+
+        /// <summary>
+        /// Stack of publish configs, used for supporting nested publish calls.
+        /// </summary>
+        private static readonly Stack<PublishConfig<TGenEvent>> Stack = new(PoolCapacity);
+
+        /// <summary>
+        /// Pool of publish configs, used to avoid allocating new publish configs.
+        /// </summary>
+        private static readonly List<PublishConfig<TGenEvent>> Pool = new(PoolCapacity);
+
+        private static PublishConfig<TGenEvent> _setting;
+        private static PublishConfig<TGenEvent> _mainInstance;
+
+        /// <summary>
+        /// 当前正在配置的 config。配置完成后调用 <see cref="Push"/> 将本配置入栈，并从池中获取新 config。
+        /// </summary>
+        public static PublishConfig<TGenEvent> Setting
         {
-            if (_instance != null) return _instance;
-            
-            _instance = new PublishConfig<TGenEvent>();
-            _mainInstance = _instance;
-            return _instance;
-        }
-    }
-
-    /// <summary>Config used for the current Publish (stack top when in a Publish, otherwise Instance).</summary>
-    public static PublishConfig<TGenEvent> GetCurrentConfig()
-    {
-        if (Stack.Count > 0)
-            return Stack.Peek();
-        if (_instance == null)
-        {
-            _instance = new PublishConfig<TGenEvent>();
-            _mainInstance = _instance;
-        }
-        return _instance;
-    }
-
-    private static PublishConfig<TGenEvent> GetFromPool()
-    {
-        if (Pool.Count > 0)
-        {
-            var i = Pool.Count - 1;
-            var config = Pool[i];
-            Pool.RemoveAt(i);
-            config.Clear();
-            return config;
-        }
-        return new PublishConfig<TGenEvent>();
-    }
-
-    private static void ReturnToPool(PublishConfig<TGenEvent> config)
-    {
-        if (config == _mainInstance)
-            return;
-        config.Clear();
-        if (Pool.Count < PoolCapacity)
-            Pool.Add(config);
-    }
-
-    /// <summary>Call at Publish() entry: push current Instance, then replace Instance with a pooled config.</summary>
-    internal static void PushLayer()
-    {
-        if (_instance == null)
-        {
-            _instance = new PublishConfig<TGenEvent>();
-            _mainInstance = _instance;
-        }
-        Stack.Push(_instance);
-        _instance = GetFromPool();
-    }
-
-    /// <summary>Call at Publish() exit: pop layer, return current Instance to pool, restore Instance; clear if outermost.</summary>
-    internal static void PopLayer()
-    {
-        var popped = Stack.Pop();
-        ReturnToPool(_instance);
-        _instance = popped;
-        if (Stack.Count == 0)
-            _instance.Clear();
-    }
-
-    private void Clear()
-    {
-        Cancelable = false;
-        SubscriberFilters.Clear();
-    }
-
-    public void SetCancelable()
-    {
-        Cancelable = true;
-    }
-
-    public void AddFilter(Predicate<object> filter)
-    {
-        SubscriberFilters.Add(filter);
-    }
-
-    public bool IsFiltered(object subscriber)
-    {
-        for (int i = 0; i < SubscriberFilters.Count; i++)
-        {
-            if (SubscriberFilters[i](subscriber))
+            get
             {
-                return true;
+                if (_setting == null)
+                {
+                    _setting = new PublishConfig<TGenEvent>();
+                    _mainInstance = _setting;
+                }
+                return _setting;
             }
         }
 
-        return false;
+        /// <summary>
+        /// 调用过程中使用的 config，返回栈顶元素；栈空时返回当前正在配置的 config。
+        /// </summary>
+        public static PublishConfig<TGenEvent> Current
+        {
+            get
+            {
+                if (Stack.Count > 0)
+                    return Stack.Peek();
+                if (_setting == null)
+                {
+                    _setting = new PublishConfig<TGenEvent>();
+                    _mainInstance = _setting;
+                }
+                return _setting;
+            }
+        }
+
+        /// <summary>
+        /// Gets a publish config from the pool.
+        /// </summary>
+        /// <returns>A publish config from the pool.</returns>
+        private static PublishConfig<TGenEvent> GetFromPool()
+        {
+            if (Pool.Count > 0)
+            {
+                var i = Pool.Count - 1;
+                var config = Pool[i];
+                Pool.RemoveAt(i);
+                config.Clear();
+                return config;
+            }
+            return new PublishConfig<TGenEvent>();
+        }
+
+        /// <summary>
+        /// Returns a publish config to the pool.
+        /// </summary>
+        /// <param name="config">The publish config to return to the pool.</param>
+        private static void ReturnToPool(PublishConfig<TGenEvent> config)
+        {
+            if (config == _mainInstance)
+                return;
+            config.Clear();
+            if (Pool.Count < PoolCapacity)
+                Pool.Add(config);
+        }
+
+        /// <summary>
+        /// 配置完成后调用：将当前 <see cref="Setting"/> 入栈，并从池中获取新的 config 赋给 Setting。
+        /// </summary>
+        public static void Push()
+        {
+            if (_setting == null)
+            {
+                _setting = new PublishConfig<TGenEvent>();
+                _mainInstance = _setting;
+            }
+            Stack.Push(_setting);
+            _setting = GetFromPool();
+        }
+
+        /// <summary>
+        /// Publish 结束时调用：出栈，并将刚才使用的 config 归还到池中。
+        /// </summary>
+        public static void Pop()
+        {
+            var used = Stack.Pop();
+            ReturnToPool(used);
+            _setting = Stack.Count > 0 ? Stack.Peek() : _mainInstance;
+            if (Stack.Count == 0)
+                _setting.Clear();
+        }
+
+        /// <summary>
+        /// Clears the publish config.
+        /// </summary>
+        private void Clear()
+        {
+            Cancelable = false;
+            SubscriberFilters.Clear();
+        }
+
+        /// <summary>
+        /// Sets the publish config to cancelable.
+        /// </summary>
+        public void SetCancelable()
+        {
+            Cancelable = true;
+        }
+
+        /// <summary>
+        /// Adds a filter to the publish config.
+        /// </summary>
+        /// <param name="filter">The filter to add.</param>
+        public void AddFilter(Predicate<object> filter)
+        {
+            SubscriberFilters.Add(filter);
+        }
+
+        /// <summary>
+        /// Checks if a subscriber is filtered.
+        /// </summary>
+        /// <param name="subscriber">The subscriber to check.</param>
+        /// <returns>True if the subscriber is filtered, false otherwise.</returns>
+        public bool IsFiltered(object subscriber)
+        {
+            for (int i = 0; i < SubscriberFilters.Count; i++)
+            {
+                if (SubscriberFilters[i](subscriber))
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
     }
 }

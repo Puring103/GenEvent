@@ -1,8 +1,7 @@
-using System.Collections.Generic;
 using GenEvent;
 using GenEvent.Interface;
 
-namespace GenEvent.Tests;
+namespace Tests;
 
 /// <summary>
 /// Robustness: uninitialized publish, null filter args, no subscribers, GC/stability.

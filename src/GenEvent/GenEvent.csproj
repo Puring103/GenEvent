@@ -2,7 +2,7 @@
 
   <PropertyGroup>
     <TargetFramework>netstandard2.0</TargetFramework>
-    <LangVersion>default</LangVersion>
+    <LangVersion>9</LangVersion>
   </PropertyGroup>
 
   <!-- 定义源目录和目标目录 -->

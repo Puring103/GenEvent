@@ -1,7 +1,6 @@
 using GenEvent;
-using GenEvent.Interface;
 
-namespace GenEvent.Tests;
+namespace Tests;
 
 /// <summary>
 /// Cancel propagation and priority order tests.

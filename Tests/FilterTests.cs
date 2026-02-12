@@ -1,8 +1,6 @@
-using System.Collections.Generic;
 using GenEvent;
-using GenEvent.Interface;
 
-namespace GenEvent.Tests;
+namespace Tests;
 
 /// <summary>
 /// Filter tests: WithFilter, Exclude/Include Subscriber(s), OnlyType, ExcludeType, and combinations.

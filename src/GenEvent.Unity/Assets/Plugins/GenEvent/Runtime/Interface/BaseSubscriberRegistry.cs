@@ -1,29 +1,56 @@
 ﻿using System;
 using System.Collections.Generic;
 
-namespace GenEvent.Interface;
-
-public abstract class BaseSubscriberRegistry
+namespace GenEvent.Interface
 {
-    public static readonly Dictionary<Type, BaseSubscriberRegistry> Subscribers = new();
-
-    public abstract void StartListening<TSubscriber>(TSubscriber self)
-        where TSubscriber : class;
-
-    public abstract void StopListening<TSubscriber>(TSubscriber self)
-        where TSubscriber : class;
-
-    public static void StartListening<TSubscriber, TGenEvent>(TSubscriber self)
-        where TGenEvent : struct, IGenEvent<TGenEvent>
-        where TSubscriber : class
+    /// <summary>
+    /// Base class for subscriber registry classes.
+    /// All generated subscriber registry code will inherit from this class.
+    /// </summary>
+    public abstract class BaseSubscriberRegistry
     {
-        GenEventRegistry<TGenEvent, TSubscriber>.Register(self);
-    }
+        public static readonly Dictionary<Type, BaseSubscriberRegistry> Subscribers = new();
 
-    public static void StopListening<TSubscriber, TGenEvent>(TSubscriber self)
-        where TGenEvent : struct, IGenEvent<TGenEvent>
-        where TSubscriber : class
-    {
-        GenEventRegistry<TGenEvent, TSubscriber>.UnRegister(self);
+        /// <summary>
+        /// Starts listening for all event types handled by this subscriber class.
+        /// </summary>
+        /// <typeparam name="TSubscriber">The subscriber type.</typeparam>
+        /// <param name="self">The subscriber instance.</param>
+        public abstract void StartListening<TSubscriber>(TSubscriber self)
+            where TSubscriber : class;
+
+        /// <summary>
+        /// Stops listening for all event types handled by this subscriber class.
+        /// </summary>
+        /// <typeparam name="TSubscriber">The subscriber type.</typeparam>
+        /// <param name="self">The subscriber instance.</param>
+        public abstract void StopListening<TSubscriber>(TSubscriber self)
+            where TSubscriber : class;
+
+        /// <summary>
+        /// Starts listening for a specific event type handled by this subscriber class.
+        /// </summary>
+        /// <typeparam name="TSubscriber">The subscriber type.</typeparam>
+        /// <typeparam name="TGenEvent">The event type.</typeparam>
+        /// <param name="self">The subscriber instance.</param>
+        public static void StartListening<TSubscriber, TGenEvent>(TSubscriber self)
+            where TGenEvent : struct, IGenEvent<TGenEvent>
+            where TSubscriber : class
+        {
+            GenEventRegistry<TGenEvent, TSubscriber>.Register(self);
+        }
+
+        /// <summary>
+        /// Stops listening for a specific event type handled by this subscriber class.
+        /// </summary>
+        /// <typeparam name="TSubscriber">The subscriber type.</typeparam>
+        /// <typeparam name="TGenEvent">The event type.</typeparam>
+        /// <param name="self">The subscriber instance.</param>
+        public static void StopListening<TSubscriber, TGenEvent>(TSubscriber self)
+            where TGenEvent : struct, IGenEvent<TGenEvent>
+            where TSubscriber : class
+        {
+            GenEventRegistry<TGenEvent, TSubscriber>.UnRegister(self);
+        }
     }
 }

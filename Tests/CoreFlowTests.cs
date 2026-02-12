@@ -1,7 +1,6 @@
 using GenEvent;
-using GenEvent.Interface;
 
-namespace GenEvent.Tests;
+namespace Tests;
 
 /// <summary>
 /// Core flow tests: basic publish, lifecycle, multi-subscriber, PublishConfig clear.

@@ -1,7 +1,6 @@
 using GenEvent;
-using GenEvent.Interface;
 
-namespace GenEvent.Tests;
+namespace Tests;
 
 /// <summary>
 /// Extension and semantics: struct value semantics, re-publish same/different events.

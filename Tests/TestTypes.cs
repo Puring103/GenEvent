@@ -1,6 +1,8 @@
 using GenEvent;
 using GenEvent.Interface;
 
+namespace Tests;
+
 // Event types for testing
 public struct TestEventA : IGenEvent<TestEventA>
 {
