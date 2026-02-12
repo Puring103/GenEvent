@@ -73,7 +73,6 @@ public class EventPerformanceTest : MonoBehaviour
     {
         UnityEngine.Debug.Log($"\n[测试1] 订阅/取消订阅性能测试 (订阅者数量: {subscriberCount})");
 
-        var sw = Stopwatch.StartNew();
         long gcBefore = GC.CollectionCount(0);
 
         // 创建并订阅
@@ -82,9 +81,14 @@ public class EventPerformanceTest : MonoBehaviour
             var go = new GameObject($"TestSubscriber_{i}");
             var subscriber = go.AddComponent<TestSubscriber>();
             subscriber.SetTest(this);
-            subscriber.StartListening();
             _subscriberObjects.Add(go);
             _subscribers.Add(subscriber);
+        }
+
+        var sw = Stopwatch.StartNew();
+        foreach (var _subscriber in _subscribers)
+        {
+            _subscriber.StartListening();
         }
 
         sw.Stop();

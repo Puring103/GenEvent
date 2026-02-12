@@ -2,6 +2,24 @@ namespace GenEvent.SourceGenerator
 {
     internal static class Templates
     {
+        public const string GenEventBootstrap = @"using System;
+using System.CodeDom.Compiler;
+using GenEvent.Interface;
+
+namespace GenEvent
+{
+[GeneratedCode(""GenEvent"",""V0.5"")]
+internal static class GenEventBootstrap
+{
+{InitAttribute}
+    public static void Init()
+    {
+{PublisherRegistrations}
+{SubscriberRegistrations}
+    }
+}
+}
+";
         public const string EventPublisher = @"{UsingNamespaces}
 using System.CodeDom.Compiler;
 
@@ -45,25 +63,6 @@ public class {SubscriberName}SubscriberRegistry : BaseSubscriberRegistry
         where TSubscriber : class
     {
 {StopListeningCalls}
-    }
-}
-}
-";
-
-        public const string GenEventBootstrap = @"using System;
-using System.CodeDom.Compiler;
-using GenEvent.Interface;
-
-namespace GenEvent
-{
-[GeneratedCode(""GenEvent"",""V0.5"")]
-internal static class GenEventBootstrap
-{
-{InitAttribute}
-    public static void Init()
-    {
-{PublisherRegistrations}
-{SubscriberRegistrations}
     }
 }
 }

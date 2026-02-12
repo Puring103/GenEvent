@@ -21,6 +21,7 @@ namespace GenEvent
 
     /// <summary>
     /// Registry for event handling.
+    /// Uses List + Dictionary for O(1) removal by subscriber instance.
     /// </summary>
     /// <typeparam name="TGenEvent">The event type.</typeparam>
     /// <typeparam name="TSubscriber">The subscriber type.</typeparam>
@@ -28,9 +29,14 @@ namespace GenEvent
         where TGenEvent : struct, IGenEvent<TGenEvent>
     {
         /// <summary>
-        /// List of subscribers for the event.
+        /// List of subscribers for iteration (no holes; removal uses swap-with-last).
         /// </summary>
-        private static readonly List<TSubscriber> SubscriberList = new() { };
+        private static readonly List<TSubscriber> SubscriberList = new();
+
+        /// <summary>
+        /// Map from subscriber to index in SubscriberList, for O(1) removal.
+        /// </summary>
+        private static readonly Dictionary<TSubscriber, int> SubscriberIndex = new();
 
         /// <summary>
         /// Delegate for handling events.
@@ -50,20 +56,36 @@ namespace GenEvent
 
         /// <summary>
         /// Registers a subscriber for the event.
+        /// Duplicate registration is ignored (idempotent).
         /// </summary>
         /// <param name="observer">The subscriber to register.</param>
         public static void Register(TSubscriber observer)
         {
+            if (SubscriberIndex.ContainsKey(observer))
+                return;
+            var index = SubscriberList.Count;
             SubscriberList.Add(observer);
+            SubscriberIndex.Add(observer, index);
         }
 
         /// <summary>
         /// Unregisters a subscriber for the event.
+        /// O(1) removal. No-op if not registered.
         /// </summary>
         /// <param name="observer">The subscriber to unregister.</param>
         public static void UnRegister(TSubscriber observer)
         {
-            SubscriberList.Remove(observer);
+            if (!SubscriberIndex.TryGetValue(observer, out var index))
+                return;
+            var lastIndex = SubscriberList.Count - 1;
+            SubscriberIndex.Remove(observer);
+            if (index != lastIndex)
+            {
+                var last = SubscriberList[lastIndex];
+                SubscriberList[index] = last;
+                SubscriberIndex[last] = index;
+            }
+            SubscriberList.RemoveAt(lastIndex);
         }
     }
 }
