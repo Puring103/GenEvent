@@ -50,10 +50,6 @@ public class {SubscriberName}SubscriberRegistry : BaseSubscriberRegistry
 }
 ";
 
-        /// <summary>
-        /// Bootstrap 初始化类，将 Publisher/SubscriberRegistry 注册到基类。
-        /// 非 Unity：消费者需在启动时调用 Init()；Unity：{InitAttribute} 会填入 RuntimeInitializeOnLoadMethod，程序集加载后自动执行 Init()。
-        /// </summary>
         public const string GenEventBootstrap = @"using System;
 using System.CodeDom.Compiler;
 using GenEvent.Interface;

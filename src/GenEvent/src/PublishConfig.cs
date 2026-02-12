@@ -14,7 +14,7 @@ namespace GenEvent
         private const int PoolCapacity = 16;
 
         /// <summary>
-        /// Whether the event is cancelable.
+        /// Indicates whether the event is cancelable.
         /// </summary>
         public bool Cancelable { get; private set; }
 
@@ -24,12 +24,12 @@ namespace GenEvent
         private List<Predicate<object>> SubscriberFilters { get; } = new(16);
 
         /// <summary>
-        /// Stack of publish configs, used for supporting nested publish calls.
+        /// Stack of publish configs for supporting nested publish calls.
         /// </summary>
         private static readonly Stack<PublishConfig<TGenEvent>> Stack = new(PoolCapacity);
 
         /// <summary>
-        /// Pool of publish configs, used to avoid allocating new publish configs.
+        /// Pool of publish configs to avoid allocating new publish configs.
         /// </summary>
         private static readonly List<PublishConfig<TGenEvent>> Pool = new(PoolCapacity);
 
@@ -37,7 +37,7 @@ namespace GenEvent
         private static PublishConfig<TGenEvent> _mainInstance;
 
         /// <summary>
-        /// 当前正在配置的 config。配置完成后调用 <see cref="Push"/> 将本配置入栈，并从池中获取新 config。
+        /// The config currently being set up. After completing configuration, call <see cref="Push"/> to push it onto the stack and obtain a new config from the pool.
         /// </summary>
         public static PublishConfig<TGenEvent> Setting
         {
@@ -53,7 +53,7 @@ namespace GenEvent
         }
 
         /// <summary>
-        /// 调用过程中使用的 config，返回栈顶元素；栈空时返回当前正在配置的 config。
+        /// The config used during publish calls. Returns the top of the stack, or the current config being set up if the stack is empty.
         /// </summary>
         public static PublishConfig<TGenEvent> Current
         {
@@ -101,7 +101,7 @@ namespace GenEvent
         }
 
         /// <summary>
-        /// 配置完成后调用：将当前 <see cref="Setting"/> 入栈，并从池中获取新的 config 赋给 Setting。
+        /// Call after finishing configuration: pushes the current <see cref="Setting"/> onto the stack, and obtains a new config from the pool to assign to Setting.
         /// </summary>
         public static void Push()
         {
@@ -115,7 +115,7 @@ namespace GenEvent
         }
 
         /// <summary>
-        /// Publish 结束时调用：出栈，并将刚才使用的 config 归还到池中。
+        /// Call after publishing ends: pops the stack and returns the config that was just used to the pool.
         /// </summary>
         public static void Pop()
         {
@@ -136,7 +136,7 @@ namespace GenEvent
         }
 
         /// <summary>
-        /// Sets the publish config to cancelable.
+        /// Sets the publish config as cancelable.
         /// </summary>
         public void SetCancelable()
         {
@@ -153,7 +153,7 @@ namespace GenEvent
         }
 
         /// <summary>
-        /// Checks if a subscriber is filtered.
+        /// Checks if a subscriber should be filtered.
         /// </summary>
         /// <param name="subscriber">The subscriber to check.</param>
         /// <returns>True if the subscriber is filtered, false otherwise.</returns>

@@ -35,7 +35,7 @@ public class RobustnessTests
     public void IncludeSubscriber_Null_ThrowsArgumentNullException()
     {
         var evt = new TestEventA { Value = 1 };
-        Assert.Throws<ArgumentNullException>(() => evt.IncludeSubscriber(null!));
+        Assert.Throws<ArgumentNullException>(() => evt.OnlySubscriber(null!));
     }
 
     [Test]
@@ -49,7 +49,7 @@ public class RobustnessTests
     public void IncludeSubscribers_Null_ThrowsArgumentNullException()
     {
         var evt = new TestEventA { Value = 1 };
-        Assert.Throws<ArgumentNullException>(() => evt.IncludeSubscribers(null!));
+        Assert.Throws<ArgumentNullException>(() => evt.OnlySubscribers(null!));
     }
 
     [Test]

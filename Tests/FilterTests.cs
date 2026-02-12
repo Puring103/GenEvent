@@ -52,7 +52,7 @@ public class FilterTests
         subA.StartListening();
         subB.StartListening();
 
-        var evt = new TestEventA { Value = 1 }.IncludeSubscriber(subB);
+        var evt = new TestEventA { Value = 1 }.OnlySubscriber(subB);
         evt.Publish();
 
         Assert.That(subA.ReceiveCount, Is.EqualTo(0));
@@ -84,7 +84,7 @@ public class FilterTests
         subB.StartListening();
 
         var include = new HashSet<object> { subB };
-        var evt = new TestEventA { Value = 1 }.IncludeSubscribers(include);
+        var evt = new TestEventA { Value = 1 }.OnlySubscribers(include);
         evt.Publish();
 
         Assert.That(subA.ReceiveCount, Is.EqualTo(0));
