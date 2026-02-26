@@ -1,9 +1,8 @@
 # GenEvent
-[![.NET](https://github.com/wtlllll190812/GenEvent/actions/workflows/dotnet.yml/badge.svg?branch=main)](https://github.com/wtlllll190812/GenEvent/actions/workflows/dotnet.yml)
 
-GenEvent 是一个高性能,0GC的Event库，使用代码生成器实现,无运行时反射。
+[.NET](https://github.com/Puring103/GenEvent/actions/workflows/dotnet.yml)
 
-目标框架是netstandard2.0，适用于 .NET 与 Unity
+GenEvent 是一个高性能、0 GC 的事件库，通过源码生成器在编译期生成全部派发代码，无运行时反射，兼容 .NET 与 Unity（netstandard2.0）。
 
 # 目录
 
@@ -14,34 +13,36 @@ GenEvent 是一个高性能,0GC的Event库，使用代码生成器实现,无运�
   - [安装](#安装)
   - [Unity 项目](#unity-项目)
   - [最小示例](#最小示例)
-- [基本 API 与特性](#基本-api-与特性)
-  - [事件与订阅者约定](#事件与订阅者约定)
-  - [处理器返回值：void 与 bool](#处理器返回值void-与-bool)
-  - [初始化与订阅生命周期](#初始化与订阅生命周期)
-  - [发布：同步与异步](#发布同步与异步)
+- [核心 API](#核心-api)
+  - [定义事件](#定义事件)
+  - [定义订阅者与处理器](#定义订阅者与处理器)
+  - [初始化](#初始化)
+  - [订阅生命周期](#订阅生命周期)
+  - [发布事件](#发布事件)
   - [事件优先级](#事件优先级)
-  - [事件拦截（取消传播）](#事件拦截取消传播)
-  - [发布过滤（流式 API）](#发布过滤流式-api)
-  - [异步事件处理](#异步事件处理)
+  - [取消传播](#取消传播)
+  - [发布过滤](#发布过滤)
+  - [异步支持](#异步支持)
 - [源码生成器约束与诊断](#源码生成器约束与诊断)
 - [License](#license)
 
 # 主要特性
 
-1. 无运行时反射：使用代码生成，避免运行时反射开销
-2. 0 GC：使用值类型，GC友好
-3. 高易用性的流式api，发布前可链式配置 Cancelable、WithFilter、OnlyType/ExcludeType 等
-4. 基于特性的快速注册
-5. IL2cpp 友好：消除了运行时反射代码，可以在IL2CPP中正常运行
-6. 支持事件优先级、事件拦截与事件过滤
-7. 支持异步事件
-8. 支持嵌套 publish
+- **无运行时反射**：所有派发、注册代码在编译期由源码生成器生成
+- **0 GC**：事件为值类型（struct），发布路径无堆分配
+- **IL2CPP 友好**：不依赖运行时反射，可安全运行在 IL2CPP/AOT 环境
+- **优先级**：通过 `[OnEvent(SubscriberPriority.XXX)]` 在编译期确定调用顺序，运行时零排序开销
+- **取消传播**：处理器返回 `false` 配合 `Cancelable()` 可中止事件派发
+- **灵活的订阅生命周期**：`StartListening` 返回 `SubscriptionHandle`（`IDisposable`），支持 `using` 自动取消，也可手动调用 `StopListening`
+- **流式发布 API**：链式配置 `Cancelable`、`WithFilter`、`OnlyType` 等，可按需组合
+- **异步支持**：处理器可返回 `Task` / `Task<bool>`，通过 `PublishAsync` 按序 await
+- **嵌套发布**：支持在处理器内部再次发布事件，各层配置相互独立
 
 # 快速开始
 
 ## 安装
 
-通过项目引用接入 GenEvent 与源码生成器。主库引用 `GenEvent` 项目；生成器以 **Analyzer** 形式引用（不引用程序集），这样编译时会自动生成事件派发与订阅注册代码。
+通过 .csproj 引用主库和生成器。生成器以 **Analyzer** 形式接入，仅在编译期生成代码，不参与运行时：
 
 ```xml
 <ItemGroup>
@@ -52,271 +53,326 @@ GenEvent 是一个高性能,0GC的Event库，使用代码生成器实现,无运�
 </ItemGroup>
 ```
 
-目标框架 netstandard2.0，.NET 与 Unity 均可使用。Unity 项目推荐通过 **Unity Package Manager** 使用 Git URL 导入（见下文「Unity 项目」小节），也可以直接引用 GenEvent.Unity 工程。
-
 ## Unity 项目
 
-- **通过 Git 导入（推荐）**：在 Unity 中打开 `Window > Package Manager`，点击左上角 **Add** 按钮选择 **Add package from git URL...**，输入  
-  `https://github.com/wtlllll190812/GenEvent.git?path=src/GenEvent.Unity/Assets/Plugins/GenEvent`  
-  并确认，即可将 GenEvent 作为一个 Unity 包导入项目。
-- **自动初始化**：当编译时检测到引用了 **UnityEngine** 或 **UnityEditor** 时，源码生成器会为 `GenEventBootstrap.Init` 自动添加 `[UnityEngine.RuntimeInitializeOnLoadMethod(UnityEngine.RuntimeInitializeLoadType.AfterAssembliesLoaded)]`，因此 **Unity 中可在不手动调用 Init 的情况下，在程序启动时自动完成注册**。若仍需自定义时机，可在场景加载或入口处自行调用 `GenEventBootstrap.Init()`。
+在 Unity 中打开 `Window > Package Manager`，点击左上角 **Add**，选择 **Add package from git URL...**，输入：
+
+```
+https://github.com/Puring103/GenEvent.git?path=src/GenEvent.Unity/Assets/Plugins/GenEvent
+```
+
+**自动初始化**：当生成器检测到项目引用了 UnityEngine / UnityEditor 时，会自动为 `GenEventBootstrap.Init` 添加 `[RuntimeInitializeOnLoadMethod]`，程序启动时自动完成所有注册，无需手动调用。如需在特定时机初始化，仍可手动调用 `GenEventBootstrap.Init()`。
 
 ## 最小示例
-
-下面是一段可运行的最小示例：定义事件与订阅者、初始化、订阅、发布、取消订阅。
 
 ```csharp
 using GenEvent;
 using GenEvent.Interface;
 
-// 1. 定义事件：必须是 struct，并实现 IGenEvent<T>（值类型，0 GC）
-public struct MyEvent : IGenEvent<MyEvent>
+// 1. 定义事件：struct + IGenEvent<T>
+public struct PlayerDeathEvent : IGenEvent<PlayerDeathEvent>
 {
-    public int Value;
+    public int PlayerId;
 }
 
-// 2. 定义订阅者：class，用 [OnEvent] 标记处理方法；无返回值（void）表示仅接收事件、始终继续传播
-public class MySubscriber
+// 2. 定义订阅者：class + [OnEvent] 标记处理方法
+public class GameManager
 {
-    public int Received;
-
     [OnEvent]
-    public void OnMyEvent(MyEvent e)
+    public void OnPlayerDeath(PlayerDeathEvent e)
     {
-        Received = e.Value;
+        Console.WriteLine($"Player {e.PlayerId} died.");
     }
 }
 
-// 3. 程序启动时调用一次 Init，注册所有生成的 Publisher/Subscriber（必须在使用 Publish 前执行），若存在多个程序集，需要为每个程序集进行初始化
+// 3. 初始化（非 Unity 项目需在首次 Publish 前调用一次）
 GenEventBootstrap.Init();
 
-// 4. 创建订阅者并开始监听
-var subscriber = new MySubscriber();
-subscriber.StartListening();
+// 4. 订阅，StartListening 返回 SubscriptionHandle（IDisposable）
+var manager = new GameManager();
+using var handle = manager.StartListening(); // using 结束时自动取消订阅
 
 // 5. 发布事件
-new MyEvent { Value = 42 }.Publish();
-// subscriber.Received == 42
-
-// 6. 不再需要接收事件时取消订阅，否则订阅会影响 GC
-subscriber.StopListening();
+new PlayerDeathEvent { PlayerId = 1 }.Publish();
 ```
 
-# 基本 API 与特性
+---
 
-## 事件与订阅者约定
+# 核心 API
 
-- **事件**：必须为 `struct`，实现 `IGenEvent<TEvent>`，以保证值类型、无装箱、0 GC。
-- **订阅者**：`class`，事件处理方法用 `[OnEvent]` 标记。**同步**方法签名为 `void Method(TEvent e)` 或 `bool Method(TEvent e)`；**异步**为 `Task Method(TEvent e)` 或 `Task<bool> Method(TEvent e)`。
+## 定义事件
+
+事件必须是 `struct` 并实现 `IGenEvent<T>`。值类型确保发布路径 0 GC、无装箱。
 
 ```csharp
-// 事件：struct + IGenEvent<T>
-public struct GameScoreEvent : IGenEvent<GameScoreEvent>
+public struct DamageEvent : IGenEvent<DamageEvent>
 {
-    public int Score;
+    public int Amount;
+    public string Source;
+}
+```
+
+## 定义订阅者与处理器
+
+订阅者是普通 `class`，用 `[OnEvent]` 特性标记处理方法。根据是否需要参与传播控制，选择对应的返回类型：
+
+| 签名                                | 说明                                                               |
+| ----------------------------------- | ------------------------------------------------------------------ |
+| `void Method(TEvent e)`             | 只接收事件，不参与传播控制                                         |
+| `bool Method(TEvent e)`             | 返回 `false` 可中止后续订阅者接收（需配合发布时的 `Cancelable()`） |
+| `async Task Method(TEvent e)`       | 异步处理，不参与传播控制                                           |
+| `async Task<bool> Method(TEvent e)` | 异步处理，返回 `false` 可中止传播（需配合发布时的 `Cancelable()`） |
+
+```csharp
+public class HUDDisplay
+{
+    // void：相当于永远返回true
+    [OnEvent]
+    public void OnDamage(DamageEvent e)
+    {
+        UpdateHealthBar(e.Amount);
+    }
 }
 
-// 订阅者：class + [OnEvent]，可用 void 或 bool
-public class ScoreView
+public class ShieldSystem
 {
+    // bool：可以拦截事件并阻止后续订阅者收到
     [OnEvent]
-    public void OnScore(GameScoreEvent e)
+    public bool OnDamage(DamageEvent e)
     {
-        UpdateUI(e.Score);
+        if (HasShield)
+        {
+            AbsorbDamage(e.Amount);
+            return false; // 中止传播，后续订阅者（如 HUDDisplay）不会收到
+        }
+        return true;
     }
 }
 ```
 
-## 处理器返回值：void 与 bool
+同一 class 对同一事件最多定义**一个同步**和**一个异步**处理器，分别由 `Publish` 和 `PublishAsync` 触发。
 
-- **void / Task**：不关心是否取消传播时使用，写法简单；内部视为“始终继续”（等价 true）。
-- **bool / Task**：需要参与“取消传播”时使用；返回 `false` 且在发布时使用 `Cancelable()` 时，会中止向后续订阅者派发。
+## 初始化
 
-需要拦截事件时，将处理器改为返回 `bool`（或 `Task<bool>`），并在发布时链式调用 `Cancelable()`：
+首次发布前，调用 `GenEventBootstrap.Init()` 完成所有 Publisher 与 Subscriber 的注册。若项目有多个程序集，每个程序集需各自调用其生成的 `Init()`。
 
 ```csharp
-// 返回 bool：可根据条件中止传播
-public class CancelerSubscriber
+// 在程序入口调用一次即可
+GenEventBootstrap.Init();
+```
+
+Unity 项目由生成器自动插入 `[RuntimeInitializeOnLoadMethod]`，无需手动调用。
+
+## 订阅生命周期
+
+`StartListening()` 将订阅者注册到事件系统，并返回一个 `SubscriptionHandle`（`IDisposable`）。持有该句柄并在合适时机 `Dispose`，即可取消订阅，等价于调用 `StopListening()`。
+
+**推荐：持有句柄，在销毁时 Dispose**
+
+```csharp
+public class Enemy : MonoBehaviour
 {
-    [OnEvent]
-    public bool OnScore(GameScoreEvent e)
+    private SubscriptionHandle _handle;
+
+    void OnEnable()  => _handle = this.StartListening();
+    void OnDisable() => _handle.Dispose(); // 等价于 this.StopListening()
+}
+```
+
+**或使用 `using` 限定作用域**
+
+```csharp
+using (subscriber.StartListening())
+{
+    new DamageEvent { Amount = 10 }.Publish(); // 正常接收
+} // 离开 using 块，自动取消订阅
+
+new DamageEvent { Amount = 5 }.Publish(); // 不再接收
+```
+
+**也可以直接调用 `StopListening()`（忽略句柄）**
+
+```csharp
+subscriber.StartListening(); // 忽略返回值，与旧写法完全相同
+
+new DamageEvent { Amount = 10 }.Publish();
+
+subscriber.StopListening(); // 手动取消
+```
+
+`SubscriptionHandle.Dispose()` 是幂等的，多次调用安全。
+
+**仅订阅某一种事件**（当订阅者处理多种事件类型时）：
+
+```csharp
+// 只注册 DamageEvent，其他事件类型不受影响
+using var handle = subscriber.StartListening<MySubscriber, DamageEvent>();
+```
+
+> 未取消订阅的订阅者会阻止 GC 回收，请在对象销毁时务必取消。
+
+## 发布事件
+
+**同步发布**：`Publish()` 返回 `bool`，表示事件是否完整派发到所有订阅者（未触发取消传播时始终为 `true`）。
+
+```csharp
+bool completed = new DamageEvent { Amount = 10 }.Publish();
+```
+
+**异步发布**：`PublishAsync()` 按优先级顺序依次 await 每个处理器，返回 `Task<bool>`（未触发取消传播时始终为 `true`）。
+
+```csharp
+bool completed = await new DamageEvent { Amount = 10 }.PublishAsync();
+```
+
+> 同步 `Publish()` 只调用 sync 处理器；`PublishAsync()` 会调用 sync 与 async 处理器。
+
+## 事件优先级
+
+通过 `[OnEvent(SubscriberPriority.XXX)]` 指定优先级，调用顺序在**编译期**由生成器确定，运行时零排序开销。
+
+优先级从高到低：`Primary` > `High` > `Medium`（默认）> `Low` > `End`
+
+```csharp
+public class ShieldSystem
+{
+    [OnEvent(SubscriberPriority.High)] // 先于默认 Medium 执行
+    public bool OnDamage(DamageEvent e)
     {
-        if (e.Score < 0) return false; // 中止传播
-        UpdateUI(e.Score);
+        if (HasShield) { AbsorbDamage(e.Amount); return false; }
         return true;
     }
 }
 
-// 发布时标记为可取消，链式调用
-var evt = new GameScoreEvent { Score = -1 }.Cancelable();
-bool completed = evt.Publish(); // completed == false，后续订阅者不会收到
-```
-
-## 初始化与订阅生命周期
-
-- **初始化**：`GenEventBootstrap.Init()` 会注册所有由源码生成器生成的 Publisher/Subscriber，必须在首次 `Publish` 前调用（例如程序入口或 Unity 场景加载时）。
-- **订阅**：
-  - `subscriber.StartListening()`：监听该订阅者类型所处理的**所有**事件。
-  - `subscriber.StopListening()`：取消上述监听。
-  - `subscriber.StartListening<TSubscriber, TGenEvent>()` / `subscriber.StopListening<TSubscriber, TGenEvent>()`：仅监听/取消某一种事件。
-
-不调用 `StopListening` 会导致订阅常驻，订阅者难以被 GC 回收，请在不使用时务必取消订阅。
-
-```csharp
-GenEventBootstrap.Init();
-
-var sub = new MySubscriber();
-// 监听该订阅者处理的所有事件类型
-sub.StartListening();
-
-// 或仅监听某一种事件（当该订阅者处理多种事件类型时）
-sub.StartListening<MySubscriber, MyEvent>();
-
-// 不再需要时取消
-sub.StopListening();
-```
-
-## 发布：同步与异步
-
-- **同步**：`evt.Publish()` 返回 `bool`，表示是否所有订阅者都处理完；若有订阅者返回 `false` 且本次发布为 `Cancelable()`，则中止传播并返回 `false`。
-- **异步**：`await evt.PublishAsync()` 返回 `Task<bool>`，语义与 `Publish()` 相同。
-
-注意：**同步 `Publish()` 不会调用仅定义了 async handler 的订阅者**；只有 `PublishAsync()` 会调用异步 handler。
-
-```csharp
-var evt = new MyEvent { Value = 1 };
-bool ok = evt.Publish();
-
-var evt2 = new MyEvent { Value = 2 };
-bool okAsync = await evt2.PublishAsync();
-```
-
-## 事件优先级
-
-通过 `[OnEvent(SubscriberPriority.XXX)]` 指定优先级，执行顺序在编译期由生成器确定，不会在运行时排序。优先级从高到低：`Primary`、`High`、`Medium`、`Low`、`End`。
-
-```csharp
-public class EarlySubscriber
+public class HUDDisplay
 {
-    [OnEvent(SubscriberPriority.High)]
-    public bool OnE(MyEvent e) { /* 先执行 */ return true; }
-}
-
-public class LateSubscriber
-{
-    [OnEvent(SubscriberPriority.Low)]
-    public bool OnE(MyEvent e) { /* 后执行 */ return true; }
+    [OnEvent] // 默认 Medium，在 ShieldSystem 之后执行
+    public void OnDamage(DamageEvent e) => UpdateHealthBar(e.Amount);
 }
 ```
 
-## 事件拦截（取消传播）
+## 取消传播
 
-仅当处理器返回 **bool**（或 **Task**）时，返回 `false` 才会在发布时链式加上 `Cancelable()` 的情况下中止传播；void / Task 无返回值，不能取消传播。处理器返回 `false` 会立即停止向后续订阅者派发，`Publish`/`PublishAsync` 返回 `false`。
+在发布时链式调用 `.Cancelable()`，此后若某个处理器返回 `false`，传播立即中止，后续订阅者不再收到本次事件，`Publish` 返回 `false`。
 
-```csharp
-// 订阅者中某一位返回 false
-public class Canceler
-{
-    [OnEvent]
-    public bool OnE(MyEvent e) => false; // 中止传播
-}
-
-// 发布时标记为可取消，链式调用
-var evt = new MyEvent { Value = 1 }.Cancelable();
-bool completed = evt.Publish(); // completed == false，后续订阅者不会收到
-```
-
-## 发布过滤（流式 API）
-
-以下均为**本次发布**的链式配置，仅影响这一次 `Publish`/`PublishAsync` 触达的订阅者，可组合使用。
-
-| 能力       | API                                         | 说明                                        |
-| ---------- | ------------------------------------------- | ------------------------------------------- |
-| 可取消     | `evt.Cancelable()`                          | 允许处理器通过返回 false 中止传播           |
-| 自定义过滤 | `evt.WithFilter(Predicate<object> filter)`  | filter(subscriber) 为 true 时过滤掉该订阅者 |
-| 仅某类型   | `evt.OnlyType<TGenEvent, TSubscriber>()`    | 仅 TSubscriber 类型收到                     |
-| 排除某类型 | `evt.ExcludeType<TGenEvent, TSubscriber>()` | 排除 TSubscriber 类型                       |
-| 排除某实例 | `evt.ExcludeSubscriber(subscriber)`         | 排除指定实例                                |
-| 仅某实例   | `evt.OnlySubscriber(subscriber)`            | 仅该实例收到                                |
-| 排除多实例 | `evt.ExcludeSubscribers(HashSet<object>)`   | 排除集合中的实例                            |
-| 仅多实例   | `evt.OnlySubscribers(HashSet<object>)`      | 仅集合中的实例收到                          |
-
-示例：仅某类型收到、排除某实例。
+不调用 `Cancelable()` 时，所有处理器的返回值被忽略，事件始终完整派发给所有订阅者。
 
 ```csharp
-// 仅 UI 订阅者收到
-new MyEvent { Value = 1 }.OnlyType<MyEvent, UISubscriber>().Publish();
-
-// 排除某个具体实例
-new MyEvent { Value = 2 }.ExcludeSubscriber(thatSubscriber).Publish();
-
-// 链式组合
-new MyEvent { Value = 3 }
+// 带 Cancelable：ShieldSystem（High）返回 false 时，HUDDisplay（Medium）不会收到
+bool handled = new DamageEvent { Amount = 10 }
     .Cancelable()
-    .OnlyType<MyEvent, GameLogic>()
     .Publish();
+// handled == false 说明传播被中止
+
+// 不带 Cancelable：所有订阅者都会收到，返回值无效
+new DamageEvent { Amount = 10 }.Publish();
 ```
 
-使用 `ExcludeSubscribers` / `OnlySubscribers` 时传入的 `HashSet<object>` 不可为 null。示例：
+## 发布过滤
+
+以下 API 均为**本次发布**的链式配置，仅影响当次派发，不修改订阅注册状态，可自由组合：
+
+| API                                        | 说明                                            |
+| ------------------------------------------ | ----------------------------------------------- |
+| `evt.Cancelable()`                         | 允许处理器通过返回 `false` 中止传播             |
+| `evt.WithFilter(Predicate<object> filter)` | `filter(subscriber)` 返回 `true` 时跳过该订阅者 |
+| `evt.OnlyType<TEvent, TSubscriber>()`      | 仅 `TSubscriber` 类型的订阅者收到               |
+| `evt.ExcludeType<TEvent, TSubscriber>()`   | 排除 `TSubscriber` 类型的订阅者                 |
+| `evt.OnlySubscriber(subscriber)`           | 仅指定实例收到                                  |
+| `evt.ExcludeSubscriber(subscriber)`        | 排除指定实例                                    |
+| `evt.OnlySubscribers(HashSet<object>)`     | 仅集合中的实例收到                              |
+| `evt.ExcludeSubscribers(HashSet<object>)`  | 排除集合中的实例                                |
 
 ```csharp
-// 排除多个实例：仅排除 HashSet 中的订阅者
-var excludeSet = new HashSet<object> { subscriberB, subscriberC };
-new MyEvent { Value = 2 }.ExcludeSubscribers(excludeSet).Publish();
+// 仅通知 UI 层，不触发游戏逻辑
+new DamageEvent { Amount = 5 }
+    .OnlyType<DamageEvent, HUDDisplay>()
+    .Publish();
 
-// 仅多实例收到：仅 HashSet 中的订阅者会收到
-var includeSet = new HashSet<object> { subscriberA };
-new MyEvent { Value = 3 }.OnlySubscribers(includeSet).Publish();
+// 排除自身，避免收到自己发出的事件
+new DamageEvent { Amount = 5 }
+    .ExcludeSubscriber(this)
+    .Publish();
+
+// 链式组合：可取消 + 仅指定类型
+new DamageEvent { Amount = 5 }
+    .Cancelable()
+    .OnlyType<DamageEvent, ShieldSystem>()
+    .Publish();
+
+// 排除多个实例
+var exclude = new HashSet<object> { enemyA, enemyB };
+new DamageEvent { Amount = 5 }.ExcludeSubscribers(exclude).Publish();
 ```
 
-## 异步事件处理
+## 异步支持
 
-异步处理器可为 **Task**（无返回值，视为继续）或 **Task**（返回 false 时可配合 `**Cancelable()` 中止传播），例如 `[OnEvent] public async Task OnX(MyEvent e) { ... }` 或 `[OnEvent] public async Task<bool> OnX(MyEvent e) { ... }`。`PublishAsync()` 会按优先级依次 await 这些 handler；同步 `Publish()` 不会调用仅有 async handler 的订阅者。同一订阅者类型可同时定义 sync 与 async 两个 handler，分别由 `Publish` 与 `PublishAsync` 触发。
+将处理方法签名改为返回 `Task` 或 `Task<bool>` 即可定义异步处理器，无需额外配置。
 
 ```csharp
-public class AsyncSubscriber
+public class NetworkSync
 {
     [OnEvent]
-    public async Task OnMyEventAsync(MyEvent e)  // void 风格：无返回值，始终继续
+    public async Task OnDamage(DamageEvent e)
     {
-        await DoSomethingAsync(e.Value);
+        await SendToServerAsync(e);
+    }
+}
+
+// 异步发布：按优先级顺序依次 await 每个处理器
+bool completed = await new DamageEvent { Amount = 10 }.PublishAsync();
+```
+
+同一订阅者可以同时定义 sync 和 async 两个处理器处理同一事件，分别由 `Publish` 和 `PublishAsync` 触发：
+
+```csharp
+public class CombatLogger
+{
+    [OnEvent]
+    public void OnDamage(DamageEvent e)              // 由 Publish() 触发
+    {
+        LogToFile(e);
     }
 
-    // 或需要取消传播时使用 Task<bool>
-    // public async Task<bool> OnMyEventAsync(MyEvent e) { ... return true; }
+    [OnEvent]
+    public async Task OnDamageAsync(DamageEvent e)   // 由 PublishAsync() 触发（注意，同步版本也会被调用）
+    {
+        await LogToRemoteAsync(e);
+    }
 }
-
-// 仅异步发布会调用上述 handler
-await new MyEvent { Value = 1 }.PublishAsync();
 ```
+
+---
 
 # 源码生成器约束与诊断
 
-源码生成器对事件与 `[OnEvent]` 方法有明确约束，违反时会产生下列诊断，便于排查编译错误。
+生成器对事件与 `[OnEvent]` 方法有明确约束，违反时会在**编译期**报告诊断，不会静默失败。
 
-**约束：**
+**事件约束**
 
-- **事件**：必须为 `struct`，并实现 `IGenEvent<TEvent>`（生成器通过 `IGenEvent<T>` 的元数据名识别）。
-- **[OnEvent] 方法**：
-  - 必须为 **public**。
-  - 必须有且仅有 **一个参数**，且该参数类型为实现了 `IGenEvent<>` 的事件类型。
-  - 返回类型只能是 **void**、**bool**、**Task** 或 **Task**。
-  - 同一 **class** 对同一事件类型只能有一个同步 handler 与一个异步 handler（即每事件类型最多两个方法）。
+- 必须是 `struct`，并实现 `IGenEvent<T>`
 
-**诊断码：**
+**处理器方法约束**
 
-| 代码  | 严重性  | 含义                                                                              |
-| ----- | ------- | --------------------------------------------------------------------------------- |
-| GE001 | Warning | 未找到 IGenEvent 接口，请确保已引用 GenEvent。                                    |
-| GE002 | Warning | 未找到 OnEventAttribute，请确保已引用 GenEvent。                                  |
-| GE010 | Error   | [OnEvent] 方法必须为 public。                                                     |
-| GE011 | Error   | [OnEvent] 方法必须有且仅有一个参数（事件类型）。                                  |
-| GE012 | Error   | [OnEvent] 方法参数必须是 IGenEvent 类型。                                         |
-| GE013 | Error   | 同一类对同一事件类型只能有一个 [OnEvent] 方法（可同时有一个 sync 与一个 async）。 |
-| GE014 | Error   | [OnEvent] 方法返回类型必须为 void、bool、Task 或 Task。                           |
-| GE999 | Error   | 源码生成器内部异常，消息中会包含具体原因。                                        |
+- 必须是 `public` 实例方法
+- 必须有且仅有一个参数，且类型为实现了 `IGenEvent<>` 的事件类型
+- 返回类型只能是 `void`、`bool`、`Task` 或 `Task<bool>`
+- 同一 class 对同一事件类型，最多一个 sync handler 和一个 async handler
 
-出现 GE001/GE002 时请检查主库与生成器引用是否正确；GE010–GE014 按上表修正方法签名与数量；GE999 请查看编译器输出的异常信息。
+**诊断码**
+
+| 代码  | 严重性  | 含义                                                                  |
+| ----- | ------- | --------------------------------------------------------------------- |
+| GE001 | Warning | 未找到 `IGenEvent` 接口，请检查 GenEvent 引用                         |
+| GE002 | Warning | 未找到 `OnEventAttribute`，请检查 GenEvent 引用                       |
+| GE010 | Error   | `[OnEvent]` 方法必须为 public                                         |
+| GE011 | Error   | `[OnEvent]` 方法必须恰好有一个参数                                    |
+| GE012 | Error   | `[OnEvent]` 方法参数必须是 `IGenEvent` 类型                           |
+| GE013 | Error   | 同一 class 对同一事件类型不能有两个同步或两个异步 handler             |
+| GE014 | Error   | `[OnEvent]` 方法返回类型必须为 `void`、`bool`、`Task` 或 `Task<bool>` |
+| GE999 | Error   | 源码生成器内部异常，请查看编译器输出获取详情                          |
+
+出现 GE001/GE002 时请检查主库与生成器的引用是否均已正确添加；GE010–GE014 按上表修正方法签名；GE999 请查看编译器完整输出。
 
 # License
 
