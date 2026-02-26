@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using System.Threading.Tasks;
 using GenEvent.Interface;
 
 namespace GenEvent
@@ -18,6 +19,17 @@ namespace GenEvent
     /// false to stop event propagation.
     /// </returns>
     public delegate bool GenEventDelegate<in TGenEvent, in TSubscriber>(TGenEvent gameEvent, TSubscriber subscriber);
+
+    /// <summary>
+    /// Async delegate for handling events.
+    /// Returns a task that completes with true to continue propagation, or false to cancel.
+    /// </summary>
+    /// <typeparam name="TGenEvent">The event type.</typeparam>
+    /// <typeparam name="TSubscriber">The subscriber type.</typeparam>
+    /// <param name="gameEvent">The event to publish.</param>
+    /// <param name="subscriber">The subscriber handling the event.</param>
+    /// <returns>Task that completes with true to continue, false to stop propagation.</returns>
+    public delegate Task<bool> GenEventAsyncDelegate<in TGenEvent, in TSubscriber>(TGenEvent gameEvent, TSubscriber subscriber);
 
     /// <summary>
     /// Registry for event handling.
@@ -43,15 +55,30 @@ namespace GenEvent
         /// </summary>
         public static GenEventDelegate<TGenEvent, TSubscriber> GenEvent { get; private set; }
 
+        /// <summary>
+        /// Async delegate for handling events. May be null if only sync handler is registered.
+        /// </summary>
+        public static GenEventAsyncDelegate<TGenEvent, TSubscriber> GenEventAsync { get; private set; }
+
         public static IReadOnlyList<TSubscriber> Subscribers => SubscriberList;
 
         /// <summary>
-        /// Initializes the event registry.
+        /// Initializes the event registry with a sync delegate.
         /// </summary>
         /// <param name="genEventDelegate">The delegate for handling events.</param>
         public static void Initialize(GenEventDelegate<TGenEvent, TSubscriber> genEventDelegate)
         {
             GenEvent = genEventDelegate;
+        }
+
+        /// <summary>
+        /// Initializes the async delegate for the event registry.
+        /// May be used in addition to Initialize when a class has both sync and async handlers for the same event.
+        /// </summary>
+        /// <param name="genEventAsyncDelegate">The async delegate for handling events.</param>
+        public static void InitializeAsync(GenEventAsyncDelegate<TGenEvent, TSubscriber> genEventAsyncDelegate)
+        {
+            GenEventAsync = genEventAsyncDelegate;
         }
 
         /// <summary>

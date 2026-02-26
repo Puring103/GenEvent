@@ -16,6 +16,8 @@ namespace GenEvent.SourceGenerator
     {
         private const string GenEventMetadataName = "GenEvent.Interface.IGenEvent`1";
         private const string OnEventAttributeMetadataName = "GenEvent.OnEventAttribute";
+        private const string TaskMetadataName = "System.Threading.Tasks.Task";
+        private const string TaskOfTMetadataName = "System.Threading.Tasks.Task`1";
 
         public void Initialize(GeneratorInitializationContext context)
         {
@@ -70,7 +72,7 @@ namespace GenEvent.SourceGenerator
                 foreach (var sub in subscribers.GroupBy(s => s.SubscriberType, SymbolEqualityComparer.Default).Select(g => g.First()))
                 {
                     if (!subscriberToEvents.TryGetValue(sub.SubscriberType, out var evtList))
-                        evtList = new List<(INamedTypeSymbol EventType, string MethodName, bool ReturnsBool)>();
+                        evtList = new List<(INamedTypeSymbol EventType, string MethodName, bool ReturnsBool, bool IsAsync)>();
                     var source = GenerateSubscriberRegistry(sub, evtList, subscriberRegistryTemplate);
                     context.AddSource($"{sub.SubscriberType.Name}SubscriberRegistry.g.cs", SourceText.From(source, Encoding.UTF8));
                 }
@@ -132,7 +134,11 @@ namespace GenEvent.SourceGenerator
         {
             var subscribers = new List<SubscriberInfo>();
             var diagnostics = new List<Diagnostic>();
-            var eventMethodsByClass = new Dictionary<INamedTypeSymbol, Dictionary<INamedTypeSymbol, (IMethodSymbol method, Location loc)>>(SymbolEqualityComparer.Default);
+            // Per (class, eventType): list of (method, location, isAsync). At most one sync and one async allowed.
+            var eventMethodsByClass = new Dictionary<INamedTypeSymbol, Dictionary<INamedTypeSymbol, List<(IMethodSymbol method, Location loc, bool isAsync)>>>(SymbolEqualityComparer.Default);
+
+            var taskSymbol = compilation.GetTypeByMetadataName(TaskMetadataName);
+            var taskOfTSymbol = compilation.GetTypeByMetadataName(TaskOfTMetadataName);
 
             foreach (var tree in compilation.SyntaxTrees)
             {
@@ -175,21 +181,63 @@ namespace GenEvent.SourceGenerator
                         continue;
                     }
 
+                    bool isAsync;
+                    var retType = methodSymbol.ReturnType;
+                    if (retType.SpecialType == SpecialType.System_Boolean)
+                    {
+                        isAsync = false;
+                    }
+                    else if (retType.SpecialType == SpecialType.System_Void)
+                    {
+                        isAsync = false;
+                    }
+                    else if (retType is INamedTypeSymbol namedRet)
+                    {
+                        var orig = namedRet.OriginalDefinition;
+                        if (taskSymbol != null && SymbolEqualityComparer.Default.Equals(orig, taskSymbol))
+                        {
+                            isAsync = true;
+                        }
+                        else if (taskOfTSymbol != null && SymbolEqualityComparer.Default.Equals(orig, taskOfTSymbol)
+                                 && namedRet.TypeArguments.Length == 1
+                                 && namedRet.TypeArguments[0].SpecialType == SpecialType.System_Boolean)
+                        {
+                            isAsync = true;
+                        }
+                        else
+                        {
+                            diagnostics.Add(Diagnostic.Create(
+                                new DiagnosticDescriptor("GE014", "Invalid OnEvent", "[OnEvent] method return type must be void, bool, Task, or Task<bool>.", "GenEvent", DiagnosticSeverity.Error, true),
+                                methodDecl.GetLocation()));
+                            continue;
+                        }
+                    }
+                    else
+                    {
+                        diagnostics.Add(Diagnostic.Create(
+                            new DiagnosticDescriptor("GE014", "Invalid OnEvent", "[OnEvent] method return type must be void, bool, Task, or Task<bool>.", "GenEvent", DiagnosticSeverity.Error, true),
+                            methodDecl.GetLocation()));
+                        continue;
+                    }
+
                     var containingType = methodSymbol.ContainingType;
                     if (containingType == null || containingType.TypeKind != TypeKind.Class)
                         continue;
 
                     if (!eventMethodsByClass.TryGetValue(containingType, out var eventDict))
-                        eventMethodsByClass[containingType] = eventDict = new Dictionary<INamedTypeSymbol, (IMethodSymbol, Location)>(SymbolEqualityComparer.Default);
+                        eventMethodsByClass[containingType] = eventDict = new Dictionary<INamedTypeSymbol, List<(IMethodSymbol, Location, bool)>>(SymbolEqualityComparer.Default);
 
-                    if (eventDict.TryGetValue(paramType, out var existing))
+                    if (!eventDict.TryGetValue(paramType, out var list))
+                        eventDict[paramType] = list = new List<(IMethodSymbol, Location, bool)>();
+
+                    if (list.Any(t => t.isAsync == isAsync))
                     {
                         diagnostics.Add(Diagnostic.Create(
-                            new DiagnosticDescriptor("GE013", "Duplicate OnEvent", "A class can only have one [OnEvent] method per event type.", "GenEvent", DiagnosticSeverity.Error, true),
+                            new DiagnosticDescriptor("GE013", "Duplicate OnEvent", "A class can only have one [OnEvent] method per event type (one sync and one async allowed).", "GenEvent", DiagnosticSeverity.Error, true),
                             methodDecl.GetLocation()));
                         continue;
                     }
-                    eventDict[paramType] = (methodSymbol, methodDecl.GetLocation());
+                    list.Add((methodSymbol, methodDecl.GetLocation(), isAsync));
 
                     var priority = SubscriberPriority.Medium;
                     if (onEventAttr.ConstructorArguments.Length > 0 &&
@@ -203,7 +251,8 @@ namespace GenEvent.SourceGenerator
                         SubscriberType = containingType,
                         Method = methodSymbol,
                         EventType = paramType,
-                        Priority = priority
+                        Priority = priority,
+                        IsAsync = isAsync
                     });
                 }
             }
@@ -236,14 +285,16 @@ namespace GenEvent.SourceGenerator
             return map;
         }
 
-        private static Dictionary<INamedTypeSymbol, List<(INamedTypeSymbol EventType, string MethodName, bool ReturnsBool)>> BuildSubscriberEventMap(List<SubscriberInfo> subscribers)
+        private static Dictionary<INamedTypeSymbol, List<(INamedTypeSymbol EventType, string MethodName, bool ReturnsBool, bool IsAsync)>> BuildSubscriberEventMap(List<SubscriberInfo> subscribers)
         {
-            var map = new Dictionary<INamedTypeSymbol, List<(INamedTypeSymbol, string, bool)>>(SymbolEqualityComparer.Default);
+            var map = new Dictionary<INamedTypeSymbol, List<(INamedTypeSymbol, string, bool, bool)>>(SymbolEqualityComparer.Default);
             foreach (var s in subscribers)
             {
                 if (!map.TryGetValue(s.SubscriberType, out var list))
-                    map[s.SubscriberType] = list = new List<(INamedTypeSymbol, string, bool)>();
-                list.Add((s.EventType, s.Method.Name, s.Method.ReturnType.SpecialType == SpecialType.System_Boolean));
+                    map[s.SubscriberType] = list = new List<(INamedTypeSymbol, string, bool, bool)>();
+                var returnsBool = s.Method.ReturnType.SpecialType == SpecialType.System_Boolean
+                    || (s.IsAsync && s.Method.ReturnType is INamedTypeSymbol nt && nt.TypeArguments.Length == 1 && nt.TypeArguments[0].SpecialType == SpecialType.System_Boolean);
+                list.Add((s.EventType, s.Method.Name, returnsBool, s.IsAsync));
             }
             return map;
         }
@@ -251,45 +302,78 @@ namespace GenEvent.SourceGenerator
         private static string GenerateEventPublisher(EventInfo evt, IReadOnlyList<SubscriberInfo> subscriberList, string template)
         {
             var usings = CollectUsings(evt.EventType, subscriberList.Select(s => s.SubscriberType));
-            var invocations = new StringBuilder();
+            var syncInvocations = new StringBuilder();
+            var seenSyncTypes = new HashSet<INamedTypeSymbol>(SymbolEqualityComparer.Default);
             foreach (var sub in subscriberList)
             {
-                invocations.AppendLine($"        completed = @event.Invoke<{sub.SubscriberType.ToDisplayString()}, TGenEvent>(config);");
-                invocations.AppendLine("        if (!completed) return false;");
-                invocations.AppendLine();
+                if (sub.IsAsync) continue;
+                if (seenSyncTypes.Add(sub.SubscriberType))
+                {
+                    syncInvocations.AppendLine($"        completed = @event.Invoke<{sub.SubscriberType.ToDisplayString()}, TGenEvent>(config);");
+                    syncInvocations.AppendLine("        if (!completed) return false;");
+                    syncInvocations.AppendLine();
+                }
+            }
+
+            var asyncInvocations = new StringBuilder();
+            var seenAsyncTypes = new HashSet<INamedTypeSymbol>(SymbolEqualityComparer.Default);
+            foreach (var sub in subscriberList)
+            {
+                if (!seenAsyncTypes.Add(sub.SubscriberType)) continue;
+                asyncInvocations.AppendLine($"        completed = await @event.InvokeAsync<{sub.SubscriberType.ToDisplayString()}, TGenEvent>(config);");
+                asyncInvocations.AppendLine("        if (!completed) return false;");
+                asyncInvocations.AppendLine();
             }
 
             return template
                 .Replace("{UsingNamespaces}", usings)
                 .Replace("{EventName}", evt.Name)
                 .Replace("{EventFullName}", evt.FullName)
-                .Replace("{SubscriberInvocations}", invocations.ToString().TrimEnd());
+                .Replace("{SubscriberInvocations}", syncInvocations.ToString().TrimEnd())
+                .Replace("{SubscriberInvocationsAsync}", asyncInvocations.ToString().TrimEnd());
         }
 
         private static string GenerateSubscriberRegistry(SubscriberInfo sub,
-            IReadOnlyList<(INamedTypeSymbol EventType, string MethodName, bool ReturnsBool)> subscriberEvents,
+            IReadOnlyList<(INamedTypeSymbol EventType, string MethodName, bool ReturnsBool, bool IsAsync)> subscriberEvents,
             string template)
         {
             var events = subscriberEvents.Count > 0
                 ? subscriberEvents
-                : new List<(INamedTypeSymbol, string, bool)> { (sub.EventType, sub.Method.Name, sub.Method.ReturnType.SpecialType == SpecialType.System_Boolean) };
+                : new List<(INamedTypeSymbol, string, bool, bool)> { (sub.EventType, sub.Method.Name, sub.Method.ReturnType.SpecialType == SpecialType.System_Boolean, sub.IsAsync) };
 
             var usings = CollectUsings(sub.SubscriberType, events.Select(e => e.EventType));
             var eventRegistrations = new StringBuilder();
             var startCalls = new StringBuilder();
             var stopCalls = new StringBuilder();
+            var seenEventTypes = new HashSet<INamedTypeSymbol>(SymbolEqualityComparer.Default);
 
-            foreach (var (eventType, methodName, returnsBool) in events)
+            foreach (var (eventType, methodName, returnsBool, isAsync) in events)
             {
-                var returnExpr = returnsBool ? "return subscriber." + methodName + "(gameEvent);" : "subscriber." + methodName + "(gameEvent); return true;";
-                eventRegistrations.AppendLine($"        GenEventRegistry<{eventType.ToDisplayString()}, {sub.SubscriberType.ToDisplayString()}>.Initialize((gameEvent, subscriber) =>");
-                eventRegistrations.AppendLine("        {");
-                eventRegistrations.AppendLine($"            {returnExpr}");
-                eventRegistrations.AppendLine("        });");
+                if (isAsync)
+                {
+                    var returnExpr = returnsBool
+                        ? "return await subscriber." + methodName + "(gameEvent);"
+                        : "await subscriber." + methodName + "(gameEvent); return true;";
+                    eventRegistrations.AppendLine($"        GenEventRegistry<{eventType.ToDisplayString()}, {sub.SubscriberType.ToDisplayString()}>.InitializeAsync(async (gameEvent, subscriber) =>");
+                    eventRegistrations.AppendLine("        {");
+                    eventRegistrations.AppendLine($"            {returnExpr}");
+                    eventRegistrations.AppendLine("        });");
+                }
+                else
+                {
+                    var returnExpr = returnsBool ? "return subscriber." + methodName + "(gameEvent);" : "subscriber." + methodName + "(gameEvent); return true;";
+                    eventRegistrations.AppendLine($"        GenEventRegistry<{eventType.ToDisplayString()}, {sub.SubscriberType.ToDisplayString()}>.Initialize((gameEvent, subscriber) =>");
+                    eventRegistrations.AppendLine("        {");
+                    eventRegistrations.AppendLine($"            {returnExpr}");
+                    eventRegistrations.AppendLine("        });");
+                }
                 eventRegistrations.AppendLine();
 
-                startCalls.AppendLine($"        StartListening<TSubscriber, {eventType.ToDisplayString()}>(self);");
-                stopCalls.AppendLine($"        StopListening<TSubscriber, {eventType.ToDisplayString()}>(self);");
+                if (seenEventTypes.Add(eventType))
+                {
+                    startCalls.AppendLine($"        StartListening<TSubscriber, {eventType.ToDisplayString()}>(self);");
+                    stopCalls.AppendLine($"        StopListening<TSubscriber, {eventType.ToDisplayString()}>(self);");
+                }
             }
 
             return template
@@ -338,6 +422,7 @@ namespace GenEvent.SourceGenerator
             public IMethodSymbol Method { get; set; }
             public INamedTypeSymbol EventType { get; set; }
             public SubscriberPriority Priority { get; set; }
+            public bool IsAsync { get; set; }
         }
 
         private class EventCollector : CSharpSyntaxWalker

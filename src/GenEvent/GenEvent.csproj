@@ -9,6 +9,8 @@
   <PropertyGroup>
     <SourceCodeDir>$(MSBuildProjectDirectory)\src\</SourceCodeDir>
     <UnityRuntimeDir>$(MSBuildProjectDirectory)\..\GenEvent.Unity\Assets\Plugins\GenEvent\Runtime\</UnityRuntimeDir>
+    <GenerateDocumentationFile>True</GenerateDocumentationFile>
+    <DocumentationFile></DocumentationFile>
   </PropertyGroup>
 
   <!-- 收集所有源码文件 -->
@@ -27,18 +29,13 @@
     <MakeDir Directories="$(UnityRuntimeDir)" />
     
     <!-- 复制所有 .cs 文件，保持目录结构 -->
-    <Copy
-      SourceFiles="@(SourceFiles)"
-      DestinationFiles="@(SourceFiles->'$(UnityRuntimeDir)%(RecursiveDir)%(Filename)%(Extension)')"
-      SkipUnchangedFiles="true" />
+    <Copy SourceFiles="@(SourceFiles)" DestinationFiles="@(SourceFiles->'$(UnityRuntimeDir)%(RecursiveDir)%(Filename)%(Extension)')" SkipUnchangedFiles="true" />
     
     <Message Text="源码复制完成！" Importance="high" />
   </Target>
 
   <ItemGroup>
-    <ProjectReference Include="..\GenEvent.SourceGenerator\GenEvent.SourceGenerator.csproj"
-                      OutputItemType="Analyzer"
-                      ReferenceOutputAssembly="false" />
+    <ProjectReference Include="..\GenEvent.SourceGenerator\GenEvent.SourceGenerator.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
   </ItemGroup>
 
 </Project>

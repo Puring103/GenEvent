@@ -1,3 +1,4 @@
+using System.Threading.Tasks;
 using GenEvent;
 using GenEvent.Interface;
 
@@ -280,5 +281,97 @@ public class RepublishDifferentEventSubscriber
     {
         EventBCount++;
         return true;
+    }
+}
+
+// --- Async tests: event and subscribers ---
+
+public struct TestEventAsync : IGenEvent<TestEventAsync>
+{
+    public int Value;
+}
+
+/// <summary>Async handler only for TestEventAsync. Sync Publish must not call this.</summary>
+public class AsyncOnlySubscriber
+{
+    public int ReceiveCount;
+    public int LastValue;
+
+    [OnEvent]
+    public async Task<bool> OnTestEventAsync(TestEventAsync e)
+    {
+        await Task.Yield();
+        ReceiveCount++;
+        LastValue = e.Value;
+        return true;
+    }
+}
+
+/// <summary>Sync handler only for TestEventAsync. PublishAsync should call this directly (no Task.FromResult).</summary>
+public class SyncOnlySubscriberForAsyncEvent
+{
+    public int ReceiveCount;
+    public int LastValue;
+
+    [OnEvent]
+    public bool OnTestEventAsync(TestEventAsync e)
+    {
+        ReceiveCount++;
+        LastValue = e.Value;
+        return true;
+    }
+}
+
+/// <summary>Same class, both sync and async [OnEvent] for TestEventAsync. Sync path calls sync only; async path calls both.</summary>
+public class SyncAndAsyncSubscriber
+{
+    public int SyncCount;
+    public int AsyncCount;
+    public int LastValueSync;
+    public int LastValueAsync;
+
+    [OnEvent]
+    public bool OnTestEventAsyncSync(TestEventAsync e)
+    {
+        SyncCount++;
+        LastValueSync = e.Value;
+        return true;
+    }
+
+    [OnEvent]
+    public async Task<bool> OnTestEventAsyncAsync(TestEventAsync e)
+    {
+        await Task.Yield();
+        AsyncCount++;
+        LastValueAsync = e.Value;
+        return true;
+    }
+}
+
+/// <summary>Async handler that can cancel propagation.</summary>
+public class AsyncCancelSubscriber
+{
+    public int ReceiveCount;
+    public bool ShouldCancel;
+
+    [OnEvent]
+    public async Task<bool> OnTestEventAsync(TestEventAsync e)
+    {
+        await Task.Yield();
+        ReceiveCount++;
+        return !ShouldCancel;
+    }
+}
+
+/// <summary>Async handler returning Task (no bool). Treated as continue (true).</summary>
+public class AsyncTaskNoBoolSubscriber
+{
+    public int ReceiveCount;
+
+    [OnEvent]
+    public async Task OnTestEventAsync(TestEventAsync e)
+    {
+        await Task.Yield();
+        ReceiveCount++;
     }
 }

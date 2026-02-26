@@ -21,6 +21,7 @@ internal static class GenEventBootstrap
 }
 ";
         public const string EventPublisher = @"{UsingNamespaces}
+using System.Threading.Tasks;
 using System.CodeDom.Compiler;
 
 namespace GenEvent
@@ -36,11 +37,21 @@ public class {EventName}Publisher : BaseEventPublisher
 
         return completed;
     }
+
+    public override async Task<bool> PublishAsync<TGenEvent>(TGenEvent @event, PublishConfig<TGenEvent> config)
+    {
+        bool completed = true;
+
+{SubscriberInvocationsAsync}
+
+        return completed;
+    }
 }
 }
 ";
 
         public const string SubscriberRegistry = @"{UsingNamespaces}
+using System.Threading.Tasks;
 using System.CodeDom.Compiler;
 
 namespace GenEvent

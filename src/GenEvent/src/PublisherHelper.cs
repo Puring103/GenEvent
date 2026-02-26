@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Threading.Tasks;
 using GenEvent.Interface;
 
 namespace GenEvent
@@ -24,6 +25,28 @@ namespace GenEvent
             {
                 var publisher = BaseEventPublisher.Publishers[typeof(TGenEvent)];
                 return publisher.Publish(gameEvent, config);
+            }
+            finally
+            {
+                PublishConfig<TGenEvent>.ReturnUsedConfig(config);
+            }
+        }
+
+        /// <summary>
+        /// Publishes an event asynchronously using the current fluent config.
+        /// Same config lifecycle as Publish; use await and ensure ReturnUsedConfig in finally.
+        /// </summary>
+        /// <typeparam name="TGenEvent">The event type.</typeparam>
+        /// <param name="gameEvent">The event to publish.</param>
+        /// <returns>Task that completes with true if all subscribers handled the event; false if any cancelled propagation.</returns>
+        public static async Task<bool> PublishAsync<TGenEvent>(this TGenEvent gameEvent)
+            where TGenEvent : struct, IGenEvent<TGenEvent>
+        {
+            var config = PublishConfig<TGenEvent>.TakeForPublish();
+            try
+            {
+                var publisher = BaseEventPublisher.Publishers[typeof(TGenEvent)];
+                return await publisher.PublishAsync(gameEvent, config);
             }
             finally
             {
@@ -175,6 +198,58 @@ namespace GenEvent
                 if (!config.Cancelable || shouldContinue) continue;
                 completed = false;
                 break;
+            }
+
+            return completed;
+        }
+
+        /// <summary>
+        /// Invokes the event publishing for one subscriber type asynchronously.
+        /// If the registry has an async delegate, awaits it per subscriber; otherwise calls the sync delegate directly (no Task.FromResult).
+        /// </summary>
+        /// <typeparam name="TSubscriber">The type of subscriber.</typeparam>
+        /// <typeparam name="TGenEvent">The event type.</typeparam>
+        /// <param name="gameEvent">The event to publish.</param>
+        /// <param name="config">The publish config for this Publish (filters, Cancelable).</param>
+        /// <returns>Task that completes with true if propagation should continue; false if cancelled.</returns>
+        public static async Task<bool> InvokeAsync<TSubscriber, TGenEvent>(this TGenEvent gameEvent, PublishConfig<TGenEvent> config)
+            where TGenEvent : struct, IGenEvent<TGenEvent>
+            where TSubscriber : class
+        {
+            var completed = true;
+            var subscribers = GenEventRegistry<TGenEvent, TSubscriber>.Subscribers;
+            var genEventAsync = GenEventRegistry<TGenEvent, TSubscriber>.GenEventAsync;
+            var genEvent = GenEventRegistry<TGenEvent, TSubscriber>.GenEvent;
+
+            if (genEventAsync != null)
+            {
+                for (int i = 0; i < subscribers.Count; i++)
+                {
+                    var subscriber = subscribers[i];
+                    if (config.IsFiltered(subscriber))
+                        continue;
+
+                    var shouldContinue = await genEventAsync(gameEvent, subscriber);
+
+                    if (!config.Cancelable || shouldContinue) continue;
+                    completed = false;
+                    break;
+                }
+            }
+            else
+            {
+                for (int i = 0; i < subscribers.Count; i++)
+                {
+                    var subscriber = subscribers[i];
+                    if (config.IsFiltered(subscriber))
+                        continue;
+
+                    var shouldContinue = genEvent?.Invoke(gameEvent, subscriber) ?? true;
+
+                    if (!config.Cancelable || shouldContinue) continue;
+                    completed = false;
+                    break;
+                }
             }
 
             return completed;
