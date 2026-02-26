@@ -1,6 +1,5 @@
 # GenEvent
-
-[GitHub stars](https://github.com/wtlllll190812/GenEvent) [.NET](https://github.com/wtlllll190812/GenEvent/actions/workflows/dotnet.yml)
+[![.NET](https://github.com/wtlllll190812/GenEvent/actions/workflows/dotnet.yml/badge.svg?branch=main)](https://github.com/wtlllll190812/GenEvent/actions/workflows/dotnet.yml)
 
 GenEvent 是一个高性能,0GC的Event库，使用代码生成器实现,无运行时反射。
 
