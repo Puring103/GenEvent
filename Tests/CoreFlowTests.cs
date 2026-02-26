@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using GenEvent;
 
 namespace Tests;
@@ -242,5 +243,80 @@ public class CoreFlowTests
         outerSub.StopListening();
         midSub.StopListening();
         innerSub.StopListening();
+    }
+
+    [Test]
+    public void StartListening_SameSubscriberMultipleTimes_IsIdempotent()
+    {
+        var subscriber = new SubscriberA();
+        subscriber.StartListening();
+        subscriber.StartListening(); // duplicate should be ignored
+
+        new TestEventA { Value = 1 }.Publish();
+
+        Assert.That(subscriber.ReceiveCount, Is.EqualTo(1));
+        subscriber.StopListening();
+        subscriber.StopListening(); // extra stop should be no-op
+    }
+
+    [Test]
+    public void UnregisterDuringPublish_OtherSubscribersStillReceive()
+    {
+        var self = new SelfUnregisteringSubscriber();
+        var other = new SubscriberA();
+        self.StartListening();
+        other.StartListening();
+
+        new TestEventA { Value = 1 }.Publish();
+        new TestEventA { Value = 2 }.Publish();
+
+        Assert.That(self.ReceiveCount, Is.EqualTo(1), "Self-unregistering subscriber should only receive first event");
+        Assert.That(other.ReceiveCount, Is.EqualTo(2), "Other subscriber should receive both events");
+        self.StopListening();
+        other.StopListening();
+    }
+
+    [Test]
+    public void RegisterDuringPublish_NewSubscriberReceivesFromNextEvent()
+    {
+        var other = new SubscriberA();
+        var adder = new AddSubscriberDuringHandleSubscriber { Other = other };
+        adder.StartListening();
+
+        // First publish: only adder is registered at the beginning of Publish,
+        // other is added during handling and should NOT receive this event.
+        new TestEventA { Value = 1 }.Publish();
+
+        Assert.That(adder.ReceiveCount, Is.EqualTo(1));
+        Assert.That(other.ReceiveCount, Is.EqualTo(0), "Subscriber added during publish should start receiving from next event");
+
+        // Second publish: both adder and other should now receive the event.
+        new TestEventA { Value = 2 }.Publish();
+        Assert.That(adder.ReceiveCount, Is.EqualTo(2));
+        Assert.That(other.ReceiveCount, Is.EqualTo(1));
+
+        adder.StopListening();
+        other.StopListening();
+    }
+
+    [Test]
+    public void ManyDistinctSubscribers_AllReceiveOnce()
+    {
+        const int subscriberCount = 100;
+        var subscribers = new List<SubscriberA>(subscriberCount);
+        for (int i = 0; i < subscriberCount; i++)
+        {
+            var sub = new SubscriberA();
+            subscribers.Add(sub);
+            sub.StartListening();
+        }
+
+        new TestEventA { Value = 1 }.Publish();
+
+        foreach (var sub in subscribers)
+        {
+            Assert.That(sub.ReceiveCount, Is.EqualTo(1));
+            sub.StopListening();
+        }
     }
 }

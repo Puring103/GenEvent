@@ -25,6 +25,23 @@ public class SourceGeneratorTests
     }
 
     [Test]
+    public void GenEventBootstrap_Init_IsIdempotent()
+    {
+        // First init done by SetUp, call Init again and ensure publishers remain valid
+        var countBefore = BaseEventPublisher.Publishers.Count;
+        GenEventBootstrap.Init();
+        var countAfter = BaseEventPublisher.Publishers.Count;
+
+        Assert.That(countAfter, Is.EqualTo(countBefore));
+
+        var subscriber = new SubscriberA();
+        subscriber.StartListening();
+        new TestEventA { Value = 10 }.Publish();
+        Assert.That(subscriber.ReceiveCount, Is.EqualTo(1));
+        subscriber.StopListening();
+    }
+
+    [Test]
     public void GeneratedSubscriberRegistry_StartListening_ReceivesEvents()
     {
         var subscriber = new SubscriberA();

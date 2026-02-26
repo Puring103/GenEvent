@@ -1,3 +1,4 @@
+using System.Threading.Tasks;
 using GenEvent;
 using GenEvent.Interface;
 
@@ -114,6 +115,65 @@ public class RobustnessTests
         new TestEventA { Value = 1 }.Publish();
         Assert.That(sub.ReceiveCount, Is.EqualTo(1));
         sub.StopListening();
+    }
+
+    [Test]
+    public async Task PublishAndPublishAsync_MixedUnderLoad_NoExceptionAndStateValid()
+    {
+        GenEventBootstrap.Init();
+        var subscriber = new SubscriberA();
+        subscriber.StartListening();
+
+        for (int i = 0; i < 100; i++)
+        {
+            new TestEventA { Value = i }.Publish();
+            await new TestEventA { Value = i }.PublishAsync();
+        }
+
+        Assert.That(subscriber.ReceiveCount, Is.EqualTo(200));
+        subscriber.StopListening();
+    }
+
+    [Test]
+    public async Task PublishAsync_WithoutInit_ThrowsKeyNotFoundException()
+    {
+        ClearBootstrapState();
+        var evt = new TestEventA { Value = 1 };
+        Assert.ThrowsAsync<KeyNotFoundException>(async () => await evt.PublishAsync());
+    }
+
+    [Test]
+    public void Publish_SubscriberThrows_PropagatesException()
+    {
+        GenEventBootstrap.Init();
+        var subscriber = new ThrowingSubscriber();
+        subscriber.StartListening();
+
+        try
+        {
+            Assert.Throws<InvalidOperationException>(() => new TestEventA { Value = 1 }.Publish());
+        }
+        finally
+        {
+            subscriber.StopListening();
+        }
+    }
+
+    [Test]
+    public void PublishAsync_SubscriberThrows_PropagatesException()
+    {
+        GenEventBootstrap.Init();
+        var subscriber = new AsyncThrowingSubscriber();
+        subscriber.StartListening();
+
+        try
+        {
+            Assert.ThrowsAsync<InvalidOperationException>(async () => await new TestEventAsync { Value = 1 }.PublishAsync());
+        }
+        finally
+        {
+            subscriber.StopListening();
+        }
     }
 
     private static void ClearBootstrapState()

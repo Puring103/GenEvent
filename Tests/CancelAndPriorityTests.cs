@@ -55,6 +55,25 @@ public class CancelAndPriorityTests
     }
 
     [Test]
+    public void NonCancelablePublish_FalseReturn_DoesNotStopPropagation()
+    {
+        var cancelSub = new CancelSubscriber { ShouldCancel = true }; // returns false
+        var lowSub = new LowPrioritySubscriberForA();
+        cancelSub.StartListening();
+        lowSub.StartListening();
+
+        // No Cancelable() here
+        var result = new TestEventA { Value = 1 }.Publish();
+
+        Assert.That(result, Is.True, "Without Cancelable, false return should not affect Publish result");
+        Assert.That(cancelSub.ReceiveCount, Is.EqualTo(1), "Cancel subscriber still runs");
+        Assert.That(lowSub.ReceiveCount, Is.EqualTo(1), "Lower priority subscriber should still run when not cancelable");
+
+        cancelSub.StopListening();
+        lowSub.StopListening();
+    }
+
+    [Test]
     public void Priority_CallOrderIs_Primary_High_Medium_Low_End()
     {
         var primary = new PrimaryPrioritySubscriber();

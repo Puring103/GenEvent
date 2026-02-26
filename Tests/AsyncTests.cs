@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using System.Threading.Tasks;
 using GenEvent;
 using NUnit.Framework;
@@ -212,6 +213,25 @@ public class AsyncTests
     }
 
     [Test]
+    public async Task PublishAsync_NonCancelable_FalseReturn_DoesNotStopPropagation()
+    {
+        var cancelSub = new AsyncCancelSubscriber { ShouldCancel = true }; // returns false
+        var otherSub = new AsyncOnlySubscriber();
+        cancelSub.StartListening();
+        otherSub.StartListening();
+
+        // No Cancelable() here
+        var result = await new TestEventAsync { Value = 1 }.PublishAsync();
+
+        Assert.That(result, Is.True, "Without Cancelable, false return should not affect PublishAsync result");
+        Assert.That(cancelSub.ReceiveCount, Is.EqualTo(1));
+        Assert.That(otherSub.ReceiveCount, Is.EqualTo(1), "Other async subscriber should still run when not cancelable");
+
+        cancelSub.StopListening();
+        otherSub.StopListening();
+    }
+
+    [Test]
     public async Task MultipleAsyncSubscribers_AllReceiveInOrder()
     {
         var sub1 = new AsyncOnlySubscriber();
@@ -232,6 +252,196 @@ public class AsyncTests
         sub1.StopListening();
         sub2.StopListening();
         sub3.StopListening();
+    }
+
+    [Test]
+    public async Task PublishAsync_NoSubscribers_ReturnsTrue()
+    {
+        // No subscribers for a dedicated async-only test event
+        var evt = new TestEventAsync { Value = 10 };
+        var result = await evt.PublishAsync();
+        Assert.That(result, Is.True);
+    }
+
+    [Test]
+    public async Task AsyncPriority_CallOrder_Is_Primary_High_Medium_Low_End()
+    {
+        var primary = new AsyncPrimaryPrioritySubscriber();
+        var high = new AsyncHighPrioritySubscriber();
+        var medium = new AsyncMediumPrioritySubscriber();
+        var low = new AsyncLowPrioritySubscriber();
+        var end = new AsyncEndPrioritySubscriber();
+
+        primary.StartListening();
+        high.StartListening();
+        medium.StartListening();
+        low.StartListening();
+        end.StartListening();
+
+        await new TestEventC { Value = 0 }.PublishAsync();
+
+        Assert.That(primary.CallOrder, Is.EqualTo(0));
+        Assert.That(high.CallOrder, Is.EqualTo(1));
+        Assert.That(medium.CallOrder, Is.EqualTo(2));
+        Assert.That(low.CallOrder, Is.EqualTo(3));
+        Assert.That(end.CallOrder, Is.EqualTo(4));
+
+        primary.StopListening();
+        high.StopListening();
+        medium.StopListening();
+        low.StopListening();
+        end.StopListening();
+    }
+
+    [Test]
+    public async Task AsyncPriority_HighCancels_LowerPrioritiesNotExecuted()
+    {
+        var primary = new AsyncPrimaryPrioritySubscriber();
+        var high = new AsyncHighPrioritySubscriber { CancelPropagation = true };
+        var medium = new AsyncMediumPrioritySubscriber();
+        var low = new AsyncLowPrioritySubscriber();
+        var end = new AsyncEndPrioritySubscriber();
+
+        primary.StartListening();
+        high.StartListening();
+        medium.StartListening();
+        low.StartListening();
+        end.StartListening();
+
+        var evt = new TestEventC { Value = 0 }.Cancelable();
+        var result = await evt.PublishAsync();
+
+        Assert.That(result, Is.False);
+        Assert.That(primary.CallOrder, Is.EqualTo(0));
+        Assert.That(high.CallOrder, Is.EqualTo(1));
+        Assert.That(medium.CallOrder, Is.EqualTo(-1));
+        Assert.That(low.CallOrder, Is.EqualTo(-1));
+        Assert.That(end.CallOrder, Is.EqualTo(-1));
+
+        primary.StopListening();
+        high.StopListening();
+        medium.StopListening();
+        low.StopListening();
+        end.StopListening();
+    }
+
+    [Test]
+    public async Task PublishAsync_OnlyTypeAndExcludeType_WorkAsExpected()
+    {
+        var sub1 = new FilterSubscriberType1();
+        var sub2 = new FilterSubscriberType2();
+        sub1.StartListening();
+        sub2.StartListening();
+
+        await new TestEventA { Value = 1 }
+            .OnlyType<TestEventA, FilterSubscriberType1>()
+            .PublishAsync();
+
+        Assert.That(sub1.ReceiveCount, Is.EqualTo(1));
+        Assert.That(sub2.ReceiveCount, Is.EqualTo(0));
+
+        sub1.ReceiveCount = 0;
+        sub2.ReceiveCount = 0;
+
+        await new TestEventA { Value = 2 }
+            .ExcludeType<TestEventA, FilterSubscriberType1>()
+            .PublishAsync();
+
+        Assert.That(sub1.ReceiveCount, Is.EqualTo(0));
+        Assert.That(sub2.ReceiveCount, Is.EqualTo(1));
+
+        sub1.StopListening();
+        sub2.StopListening();
+    }
+
+    [Test]
+    public async Task PublishAsync_OnlySubscribersAndExcludeSubscribers_WorkAsExpected()
+    {
+        var subA = new SubscriberA();
+        var subB = new SubscriberB();
+        subA.StartListening();
+        subB.StartListening();
+
+        var include = new HashSet<object> { subB };
+        await new TestEventA { Value = 1 }.OnlySubscribers(include).PublishAsync();
+
+        Assert.That(subA.ReceiveCount, Is.EqualTo(0));
+        Assert.That(subB.ReceiveCount, Is.EqualTo(1));
+
+        subA.ReceiveCount = 0;
+        subB.ReceiveCount = 0;
+
+        var exclude = new HashSet<object> { subB };
+        await new TestEventA { Value = 2 }.ExcludeSubscribers(exclude).PublishAsync();
+
+        Assert.That(subA.ReceiveCount, Is.EqualTo(1));
+        Assert.That(subB.ReceiveCount, Is.EqualTo(0));
+
+        subA.StopListening();
+        subB.StopListening();
+    }
+
+    [Test]
+    public async Task PublishAsync_MultipleFilters_Combined_AllConditionsApply()
+    {
+        var sub1 = new FilterSubscriberType1();
+        var sub2 = new FilterSubscriberType2();
+        sub1.StartListening();
+        sub2.StartListening();
+
+        await new TestEventA { Value = 1 }
+            .OnlyType<TestEventA, FilterSubscriberType1>()
+            .ExcludeSubscriber(sub1)
+            .PublishAsync();
+
+        Assert.That(sub1.ReceiveCount, Is.EqualTo(0));
+        Assert.That(sub2.ReceiveCount, Is.EqualTo(0));
+
+        sub1.ReceiveCount = 0;
+        sub2.ReceiveCount = 0;
+
+        await new TestEventA { Value = 2 }
+            .OnlyType<TestEventA, FilterSubscriberType1>()
+            .ExcludeSubscriber(sub2)
+            .PublishAsync();
+
+        Assert.That(sub1.ReceiveCount, Is.EqualTo(1));
+        Assert.That(sub2.ReceiveCount, Is.EqualTo(0));
+
+        sub1.StopListening();
+        sub2.StopListening();
+    }
+
+    [Test]
+    public async Task AsyncNestedPublish_SameEvent_ConfigIndependent()
+    {
+        var repub = new AsyncRepublishSameEventSubscriber();
+        var other = new AsyncOnlySubscriber();
+        repub.StartListening();
+        other.StartListening();
+
+        await new TestEventAsync { Value = 1 }.ExcludeSubscriber(other).PublishAsync();
+
+        // repub: outer + inner, other: only inner
+        Assert.That(repub.ReceiveCount, Is.EqualTo(2));
+        Assert.That(other.ReceiveCount, Is.EqualTo(1));
+
+        repub.StopListening();
+        other.StopListening();
+    }
+
+    [Test]
+    public async Task AsyncNestedPublish_DifferentEvent_TypesIndependent()
+    {
+        var sub = new AsyncRepublishDifferentEventSubscriber();
+        sub.StartListening();
+
+        await new TestEventAsync { Value = 5 }.PublishAsync();
+
+        Assert.That(sub.AsyncCount, Is.EqualTo(1));
+        Assert.That(sub.EventACount, Is.EqualTo(1));
+
+        sub.StopListening();
     }
 
     [Test]

@@ -1,3 +1,4 @@
+using System;
 using System.Threading.Tasks;
 using GenEvent;
 using GenEvent.Interface;
@@ -400,5 +401,183 @@ public class AsyncTaskNoBoolSubscriber
     {
         await Task.Yield();
         ReceiveCount++;
+    }
+}
+
+/// <summary>
+/// Subscriber that unregisters itself during handling, used to test removal while publishing.
+/// </summary>
+public class SelfUnregisteringSubscriber
+{
+    public int ReceiveCount;
+
+    [OnEvent]
+    public bool OnTestEventA(TestEventA e)
+    {
+        ReceiveCount++;
+        this.StopListening();
+        return true;
+    }
+}
+
+/// <summary>
+/// Subscriber that adds another subscriber during handling, used to test register while publishing.
+/// </summary>
+public class AddSubscriberDuringHandleSubscriber
+{
+    public int ReceiveCount;
+    public SubscriberA Other;
+
+    [OnEvent]
+    public bool OnTestEventA(TestEventA e)
+    {
+        ReceiveCount++;
+        if (ReceiveCount == 1 && Other != null)
+        {
+            Other.StartListening();
+        }
+        return true;
+    }
+}
+
+/// <summary>
+/// Async priority test subscribers for TestEventC.
+/// </summary>
+public class AsyncPrimaryPrioritySubscriber
+{
+    public int CallOrder = -1;
+
+    [OnEvent(SubscriberPriority.Primary)]
+    public async Task<bool> OnTestEventC(TestEventC e)
+    {
+        await Task.Yield();
+        CallOrder = 0;
+        return true;
+    }
+}
+
+public class AsyncHighPrioritySubscriber
+{
+    public int CallOrder = -1;
+    public bool CancelPropagation;
+
+    [OnEvent(SubscriberPriority.High)]
+    public async Task<bool> OnTestEventC(TestEventC e)
+    {
+        await Task.Yield();
+        CallOrder = 1;
+        return !CancelPropagation;
+    }
+}
+
+public class AsyncMediumPrioritySubscriber
+{
+    public int CallOrder = -1;
+
+    [OnEvent(SubscriberPriority.Medium)]
+    public async Task<bool> OnTestEventC(TestEventC e)
+    {
+        await Task.Yield();
+        CallOrder = 2;
+        return true;
+    }
+}
+
+public class AsyncLowPrioritySubscriber
+{
+    public int CallOrder = -1;
+
+    [OnEvent(SubscriberPriority.Low)]
+    public async Task<bool> OnTestEventC(TestEventC e)
+    {
+        await Task.Yield();
+        CallOrder = 3;
+        return true;
+    }
+}
+
+public class AsyncEndPrioritySubscriber
+{
+    public int CallOrder = -1;
+
+    [OnEvent(SubscriberPriority.End)]
+    public async Task<bool> OnTestEventC(TestEventC e)
+    {
+        await Task.Yield();
+        CallOrder = 4;
+        return true;
+    }
+}
+
+/// <summary>
+/// Async subscriber that republishes the same event, used to verify async nested publish and config isolation.
+/// </summary>
+public class AsyncRepublishSameEventSubscriber
+{
+    public int ReceiveCount;
+
+    [OnEvent]
+    public async Task<bool> OnTestEventAsync(TestEventAsync e)
+    {
+        ReceiveCount++;
+        if (ReceiveCount == 1)
+        {
+            await new TestEventAsync { Value = e.Value + 1 }.PublishAsync();
+        }
+        return true;
+    }
+}
+
+/// <summary>
+/// Async subscriber that republishes a different event type from within handler.
+/// </summary>
+public class AsyncRepublishDifferentEventSubscriber
+{
+    public int AsyncCount;
+    public int EventACount;
+
+    [OnEvent]
+    public async Task<bool> OnTestEventAsync(TestEventAsync e)
+    {
+        AsyncCount++;
+        if (AsyncCount == 1)
+        {
+            // Publish sync event from async handler
+            new TestEventA { Value = e.Value }.Publish();
+        }
+        await Task.Yield();
+        return true;
+    }
+
+    [OnEvent]
+    public bool OnTestEventA(TestEventA e)
+    {
+        EventACount++;
+        return true;
+    }
+}
+
+/// <summary>
+/// Subscriber that throws in sync handler, used to verify exception propagation.
+/// </summary>
+public class ThrowingSubscriber
+{
+    [OnEvent]
+    public bool OnTestEventA(TestEventA e)
+    {
+        throw new InvalidOperationException("ThrowingSubscriber failure");
+    }
+}
+
+/// <summary>
+/// Subscriber that throws in async handler, used to verify async exception propagation.
+/// </summary>
+public class AsyncThrowingSubscriber
+{
+    [OnEvent]
+    public async Task<bool> OnTestEventAsync(TestEventAsync e)
+    {
+        await Task.Yield();
+        throw new InvalidOperationException("AsyncThrowingSubscriber failure");
     }
 }
