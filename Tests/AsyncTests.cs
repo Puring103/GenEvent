@@ -29,6 +29,7 @@ public class AsyncTests
         Assert.That(result, Is.True);
         Assert.That(subscriber.ReceiveCount, Is.EqualTo(1));
         Assert.That(subscriber.LastValue, Is.EqualTo(42));
+        subscriber.StopListening();
     }
 
     [Test]
@@ -43,6 +44,7 @@ public class AsyncTests
         Assert.That(result, Is.True);
         Assert.That(subscriber.ReceiveCount, Is.EqualTo(1));
         Assert.That(subscriber.LastValue, Is.EqualTo(99));
+        subscriber.StopListening();
     }
 
     [Test]
@@ -57,6 +59,7 @@ public class AsyncTests
         Assert.That(result, Is.True);
         Assert.That(subscriber.ReceiveCount, Is.EqualTo(1));
         Assert.That(subscriber.LastValue, Is.EqualTo(11));
+        subscriber.StopListening();
     }
 
     [Test]
@@ -68,6 +71,7 @@ public class AsyncTests
         new TestEventAsync { Value = 1 }.Publish();
 
         Assert.That(subscriber.ReceiveCount, Is.EqualTo(0), "Sync Publish must not call async-only handlers");
+        subscriber.StopListening();
     }
 
     [Test]
@@ -81,6 +85,7 @@ public class AsyncTests
         Assert.That(subscriber.SyncCount, Is.EqualTo(1));
         Assert.That(subscriber.AsyncCount, Is.EqualTo(0), "Sync Publish must not call async handler");
         Assert.That(subscriber.LastValueSync, Is.EqualTo(5));
+        subscriber.StopListening();
     }
 
     [Test]
@@ -93,6 +98,7 @@ public class AsyncTests
 
         Assert.That(subscriber.AsyncCount, Is.EqualTo(1));
         Assert.That(subscriber.LastValueAsync, Is.EqualTo(7));
+        subscriber.StopListening();
     }
 
     [Test]
@@ -112,6 +118,9 @@ public class AsyncTests
         Assert.That(sub1.ReceiveCount, Is.EqualTo(1));
         Assert.That(sub2.ReceiveCount, Is.EqualTo(1));
         Assert.That(sub3.ReceiveCount, Is.EqualTo(0), "Should not be called after cancel");
+        sub1.StopListening();
+        sub2.StopListening();
+        sub3.StopListening();
     }
 
     [Test]
@@ -128,6 +137,8 @@ public class AsyncTests
         Assert.That(result, Is.True);
         Assert.That(sub1.ReceiveCount, Is.EqualTo(1));
         Assert.That(sub2.ReceiveCount, Is.EqualTo(1));
+        sub1.StopListening();
+        sub2.StopListening();
     }
 
     [Test]
@@ -142,6 +153,8 @@ public class AsyncTests
 
         Assert.That(subSync.ReceiveCount, Is.EqualTo(1));
         Assert.That(subAsync.ReceiveCount, Is.EqualTo(0));
+        subSync.StopListening();
+        subAsync.StopListening();
     }
 
     [Test]
@@ -156,6 +169,8 @@ public class AsyncTests
 
         Assert.That(subSync.ReceiveCount, Is.EqualTo(0));
         Assert.That(subAsync.ReceiveCount, Is.EqualTo(1));
+        subSync.StopListening();
+        subAsync.StopListening();
     }
 
     [Test]
@@ -175,6 +190,8 @@ public class AsyncTests
 
         Assert.That(subSync.ReceiveCount, Is.EqualTo(2));
         Assert.That(subAsync.ReceiveCount, Is.EqualTo(1), "Second publish should not have filter from first");
+        subSync.StopListening();
+        subAsync.StopListening();
     }
 
     [Test]
@@ -190,6 +207,8 @@ public class AsyncTests
         Assert.That(result, Is.True);
         Assert.That(subNoBool.ReceiveCount, Is.EqualTo(1));
         Assert.That(subWithBool.ReceiveCount, Is.EqualTo(1));
+        subNoBool.StopListening();
+        subWithBool.StopListening();
     }
 
     [Test]
@@ -210,6 +229,9 @@ public class AsyncTests
         Assert.That(sub1.LastValue, Is.EqualTo(33));
         Assert.That(sub2.LastValue, Is.EqualTo(33));
         Assert.That(sub3.LastValue, Is.EqualTo(33));
+        sub1.StopListening();
+        sub2.StopListening();
+        sub3.StopListening();
     }
 
     [Test]
@@ -237,5 +259,7 @@ public class AsyncTests
 
         Assert.That(subSync.ReceiveCount, Is.EqualTo(1));
         Assert.That(subAsync.ReceiveCount, Is.EqualTo(0));
+        subSync.StopListening();
+        subAsync.StopListening();
     }
 }

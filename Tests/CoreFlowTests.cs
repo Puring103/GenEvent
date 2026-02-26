@@ -25,6 +25,7 @@ public class CoreFlowTests
 
         Assert.That(subscriber.ReceiveCount, Is.EqualTo(1));
         Assert.That(subscriber.LastValue, Is.EqualTo(42));
+        subscriber.StopListening();
     }
 
     [Test]
@@ -37,6 +38,7 @@ public class CoreFlowTests
         new TestEventA { Value = 2 }.Publish();
 
         Assert.That(subscriber.ReceiveCount, Is.EqualTo(2));
+        subscriber.StopListening();
     }
 
     [Test]
@@ -65,6 +67,7 @@ public class CoreFlowTests
 
         Assert.That(subscriber.ReceiveCount, Is.EqualTo(2)); // First and third
         Assert.That(subscriber.LastValue, Is.EqualTo(3));
+        subscriber.StopListening();
     }
 
     [Test]
@@ -86,6 +89,7 @@ public class CoreFlowTests
 
         Assert.That(subscriber.EventACount, Is.EqualTo(1), "Should not receive TestEventA after StopListening for it");
         Assert.That(subscriber.EventBCount, Is.EqualTo(2));
+        subscriber.StopListening();
     }
 
     [Test]
@@ -100,6 +104,8 @@ public class CoreFlowTests
 
         Assert.That(subA.ReceiveCount, Is.EqualTo(1));
         Assert.That(subB.ReceiveCount, Is.EqualTo(1));
+        subA.StopListening();
+        subB.StopListening();
     }
 
     [Test]
@@ -114,6 +120,7 @@ public class CoreFlowTests
         Assert.That(result, Is.True);
         Assert.That(subscriber.ReceiveCount, Is.EqualTo(1));
         Assert.That(subscriber.LastValue, Is.EqualTo(99));
+        subscriber.StopListening();
     }
 
     [Test]
@@ -132,6 +139,9 @@ public class CoreFlowTests
         Assert.That(voidSub.ReceiveCount, Is.EqualTo(1), "Void handler runs first (High)");
         Assert.That(cancelSub.ReceiveCount, Is.EqualTo(1), "Bool handler runs and returns false");
         Assert.That(lowSub.ReceiveCount, Is.EqualTo(0), "Low-priority subscriber should not run after cancel");
+        voidSub.StopListening();
+        cancelSub.StopListening();
+        lowSub.StopListening();
     }
 
     [Test]
@@ -147,6 +157,8 @@ public class CoreFlowTests
 
         Assert.That(subA.ReceiveCount, Is.EqualTo(1));
         Assert.That(subC.ReceiveCount, Is.EqualTo(1));
+        subA.StopListening();
+        subC.StopListening();
     }
 
     [Test]
@@ -161,6 +173,7 @@ public class CoreFlowTests
 
         Assert.That(subscriber.EventACount, Is.EqualTo(2));
         Assert.That(subscriber.EventBCount, Is.EqualTo(1));
+        subscriber.StopListening();
     }
 
     [Test]
@@ -183,6 +196,8 @@ public class CoreFlowTests
 
         Assert.That(subA.ReceiveCount, Is.EqualTo(2));
         Assert.That(subB.ReceiveCount, Is.EqualTo(1), "Second publish should not have filter from first");
+        subA.StopListening();
+        subB.StopListening();
     }
 
     /// <summary>
@@ -201,6 +216,8 @@ public class CoreFlowTests
 
         Assert.That(subRepub.ReceiveCount, Is.EqualTo(2), "Republish sub gets outer + inner");
         Assert.That(subB.ReceiveCount, Is.EqualTo(1), "subB must get only inner; outer config excluded subB and was not overwritten by inner");
+        subRepub.StopListening();
+        subB.StopListening();
     }
 
     /// <summary>
@@ -222,5 +239,8 @@ public class CoreFlowTests
         Assert.That(outerSub.ReceiveCount, Is.EqualTo(2), "Outer sub: L1 + L3");
         Assert.That(midSub.ReceiveCount, Is.EqualTo(2), "Mid sub: L2 + L3");
         Assert.That(innerSub.ReceiveCount, Is.EqualTo(1), "Inner sub: L3 only");
+        outerSub.StopListening();
+        midSub.StopListening();
+        innerSub.StopListening();
     }
 }

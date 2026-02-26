@@ -25,6 +25,7 @@ public class ExtensionAndSemanticsTests
 
         Assert.That(subscriber.ReceivedValue, Is.EqualTo(100));
         Assert.That(evt.Value, Is.EqualTo(100), "Caller's copy should be unchanged (struct passed by value)");
+        subscriber.StopListening();
     }
 
     [Test]
@@ -43,6 +44,8 @@ public class ExtensionAndSemanticsTests
         // Inner: both receive. repub gets 2nd, other gets 1st
         Assert.That(repub.ReceiveCount, Is.EqualTo(2));
         Assert.That(other.ReceiveCount, Is.EqualTo(1), "Should receive inner event only (excluded from outer)");
+        repub.StopListening();
+        other.StopListening();
     }
 
     [Test]
@@ -55,5 +58,6 @@ public class ExtensionAndSemanticsTests
 
         Assert.That(repub.EventACount, Is.EqualTo(1));
         Assert.That(repub.EventBCount, Is.EqualTo(1), "EventB published from A handler should trigger B handler");
+        repub.StopListening();
     }
 }

@@ -229,18 +229,16 @@ bool completed = evt.Publish(); // completed == false，后续订阅者不会收
 
 以下均为**本次发布**的链式配置，仅影响这一次 `Publish`/`PublishAsync` 触达的订阅者，可组合使用。
 
-
-| 能力    | API                                         | 说明                                 |
-| ----- | ------------------------------------------- | ---------------------------------- |
-| 可取消   | `evt.Cancelable()`                          | 允许处理器通过返回 false 中止传播               |
+| 能力       | API                                         | 说明                                        |
+| ---------- | ------------------------------------------- | ------------------------------------------- |
+| 可取消     | `evt.Cancelable()`                          | 允许处理器通过返回 false 中止传播           |
 | 自定义过滤 | `evt.WithFilter(Predicate<object> filter)`  | filter(subscriber) 为 true 时过滤掉该订阅者 |
-| 仅某类型  | `evt.OnlyType<TGenEvent, TSubscriber>()`    | 仅 TSubscriber 类型收到                 |
-| 排除某类型 | `evt.ExcludeType<TGenEvent, TSubscriber>()` | 排除 TSubscriber 类型                  |
-| 排除某实例 | `evt.ExcludeSubscriber(subscriber)`         | 排除指定实例                             |
-| 仅某实例  | `evt.OnlySubscriber(subscriber)`            | 仅该实例收到                             |
-| 排除多实例 | `evt.ExcludeSubscribers(HashSet<object>)`   | 排除集合中的实例                           |
-| 仅多实例  | `evt.OnlySubscribers(HashSet<object>)`      | 仅集合中的实例收到                          |
-
+| 仅某类型   | `evt.OnlyType<TGenEvent, TSubscriber>()`    | 仅 TSubscriber 类型收到                     |
+| 排除某类型 | `evt.ExcludeType<TGenEvent, TSubscriber>()` | 排除 TSubscriber 类型                       |
+| 排除某实例 | `evt.ExcludeSubscriber(subscriber)`         | 排除指定实例                                |
+| 仅某实例   | `evt.OnlySubscriber(subscriber)`            | 仅该实例收到                                |
+| 排除多实例 | `evt.ExcludeSubscribers(HashSet<object>)`   | 排除集合中的实例                            |
+| 仅多实例   | `evt.OnlySubscribers(HashSet<object>)`      | 仅集合中的实例收到                          |
 
 示例：仅某类型收到、排除某实例。
 
@@ -306,18 +304,16 @@ await new MyEvent { Value = 1 }.PublishAsync();
 
 **诊断码：**
 
-
-| 代码    | 严重性     | 含义                                                   |
-| ----- | ------- | ---------------------------------------------------- |
-| GE001 | Warning | 未找到 IGenEvent 接口，请确保已引用 GenEvent。                    |
-| GE002 | Warning | 未找到 OnEventAttribute，请确保已引用 GenEvent。                |
-| GE010 | Error   | [OnEvent] 方法必须为 public。                              |
-| GE011 | Error   | [OnEvent] 方法必须有且仅有一个参数（事件类型）。                        |
-| GE012 | Error   | [OnEvent] 方法参数必须是 IGenEvent 类型。                      |
+| 代码  | 严重性  | 含义                                                                              |
+| ----- | ------- | --------------------------------------------------------------------------------- |
+| GE001 | Warning | 未找到 IGenEvent 接口，请确保已引用 GenEvent。                                    |
+| GE002 | Warning | 未找到 OnEventAttribute，请确保已引用 GenEvent。                                  |
+| GE010 | Error   | [OnEvent] 方法必须为 public。                                                     |
+| GE011 | Error   | [OnEvent] 方法必须有且仅有一个参数（事件类型）。                                  |
+| GE012 | Error   | [OnEvent] 方法参数必须是 IGenEvent 类型。                                         |
 | GE013 | Error   | 同一类对同一事件类型只能有一个 [OnEvent] 方法（可同时有一个 sync 与一个 async）。 |
-| GE014 | Error   | [OnEvent] 方法返回类型必须为 void、bool、Task 或 Task。           |
-| GE999 | Error   | 源码生成器内部异常，消息中会包含具体原因。                                |
-
+| GE014 | Error   | [OnEvent] 方法返回类型必须为 void、bool、Task 或 Task。                           |
+| GE999 | Error   | 源码生成器内部异常，消息中会包含具体原因。                                        |
 
 出现 GE001/GE002 时请检查主库与生成器引用是否正确；GE010–GE014 按上表修正方法签名与数量；GE999 请查看编译器输出的异常信息。
 

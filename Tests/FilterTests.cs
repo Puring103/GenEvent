@@ -27,6 +27,8 @@ public class FilterTests
 
         Assert.That(subA.ReceiveCount, Is.EqualTo(1));
         Assert.That(subB.ReceiveCount, Is.EqualTo(0), "subB filtered by predicate");
+        subA.StopListening();
+        subB.StopListening();
     }
 
     [Test]
@@ -42,6 +44,8 @@ public class FilterTests
 
         Assert.That(subA.ReceiveCount, Is.EqualTo(1));
         Assert.That(subB.ReceiveCount, Is.EqualTo(0));
+        subA.StopListening();
+        subB.StopListening();
     }
 
     [Test]
@@ -57,6 +61,8 @@ public class FilterTests
 
         Assert.That(subA.ReceiveCount, Is.EqualTo(0));
         Assert.That(subB.ReceiveCount, Is.EqualTo(1));
+        subA.StopListening();
+        subB.StopListening();
     }
 
     [Test]
@@ -73,6 +79,8 @@ public class FilterTests
 
         Assert.That(subA.ReceiveCount, Is.EqualTo(1));
         Assert.That(subB.ReceiveCount, Is.EqualTo(0));
+        subA.StopListening();
+        subB.StopListening();
     }
 
     [Test]
@@ -89,6 +97,8 @@ public class FilterTests
 
         Assert.That(subA.ReceiveCount, Is.EqualTo(0));
         Assert.That(subB.ReceiveCount, Is.EqualTo(1));
+        subA.StopListening();
+        subB.StopListening();
     }
 
     [Test]
@@ -104,6 +114,8 @@ public class FilterTests
 
         Assert.That(sub1.ReceiveCount, Is.EqualTo(1));
         Assert.That(sub2.ReceiveCount, Is.EqualTo(0));
+        sub1.StopListening();
+        sub2.StopListening();
     }
 
     [Test]
@@ -119,6 +131,8 @@ public class FilterTests
 
         Assert.That(sub1.ReceiveCount, Is.EqualTo(0));
         Assert.That(sub2.ReceiveCount, Is.EqualTo(1));
+        sub1.StopListening();
+        sub2.StopListening();
     }
 
     [Test]
@@ -149,5 +163,7 @@ public class FilterTests
 
         Assert.That(sub1.ReceiveCount, Is.EqualTo(1));
         Assert.That(sub2.ReceiveCount, Is.EqualTo(0));
+        sub1.StopListening();
+        sub2.StopListening();
     }
 }

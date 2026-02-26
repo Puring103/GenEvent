@@ -74,6 +74,7 @@ public class RobustnessTests
         subscriber.StartListening();
         new TestEventA { Value = 1 }.Publish();
         Assert.That(subscriber.ReceiveCount, Is.EqualTo(1));
+        subscriber.StopListening();
     }
 
     [Test]
@@ -87,6 +88,7 @@ public class RobustnessTests
             new TestEventA { Value = i }.Publish();
         }
         Assert.That(subscriber.ReceiveCount, Is.EqualTo(500));
+        subscriber.StopListening();
     }
 
     [Test]
@@ -111,6 +113,7 @@ public class RobustnessTests
         sub.StartListening();
         new TestEventA { Value = 1 }.Publish();
         Assert.That(sub.ReceiveCount, Is.EqualTo(1));
+        sub.StopListening();
     }
 
     private static void ClearBootstrapState()

@@ -32,6 +32,7 @@ public class SourceGeneratorTests
         new TestEventA { Value = 123 }.Publish();
         Assert.That(subscriber.ReceiveCount, Is.EqualTo(1));
         Assert.That(subscriber.LastValue, Is.EqualTo(123));
+        subscriber.StopListening();
     }
 
     [Test]
@@ -54,5 +55,10 @@ public class SourceGeneratorTests
         Assert.That(high.CallOrder, Is.LessThan(medium.CallOrder));
         Assert.That(medium.CallOrder, Is.LessThan(low.CallOrder));
         Assert.That(low.CallOrder, Is.LessThan(end.CallOrder));
+        primary.StopListening();
+        high.StopListening();
+        medium.StopListening();
+        low.StopListening();
+        end.StopListening();
     }
 }

@@ -31,6 +31,9 @@ public class CancelAndPriorityTests
         Assert.That(sub1.ReceiveCount, Is.EqualTo(1));
         Assert.That(sub2.ReceiveCount, Is.EqualTo(1));
         Assert.That(sub3.ReceiveCount, Is.EqualTo(0), "Should not be called after cancel");
+        sub1.StopListening();
+        sub2.StopListening();
+        sub3.StopListening();
     }
 
     [Test]
@@ -47,6 +50,8 @@ public class CancelAndPriorityTests
         Assert.That(result, Is.True);
         Assert.That(sub1.ReceiveCount, Is.EqualTo(1));
         Assert.That(sub2.ReceiveCount, Is.EqualTo(1));
+        sub1.StopListening();
+        sub2.StopListening();
     }
 
     [Test]
@@ -71,6 +76,11 @@ public class CancelAndPriorityTests
         Assert.That(medium.CallOrder, Is.EqualTo(2));
         Assert.That(low.CallOrder, Is.EqualTo(3));
         Assert.That(end.CallOrder, Is.EqualTo(4));
+        primary.StopListening();
+        high.StopListening();
+        medium.StopListening();
+        low.StopListening();
+        end.StopListening();
     }
 
     [Test]
@@ -96,5 +106,10 @@ public class CancelAndPriorityTests
         Assert.That(medium.CallOrder, Is.EqualTo(-1), "Should not run after High cancels");
         Assert.That(low.CallOrder, Is.EqualTo(-1));
         Assert.That(end.CallOrder, Is.EqualTo(-1));
+        primary.StopListening();
+        high.StopListening();
+        medium.StopListening();
+        low.StopListening();
+        end.StopListening();
     }
 }
