@@ -1,4 +1,6 @@
 .VSCodeCounter/
+.cursor/
+.idea/
 
 # Created by https://www.toptal.com/developers/gitignore/api/vs,rider,dotnetcore
 # Edit at https://www.toptal.com/developers/gitignore?templates=vs,rider,dotnetcore
