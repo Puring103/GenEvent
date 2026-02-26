@@ -11,7 +11,7 @@ namespace GenEvent
     public static class PublisherHelper
     {
         /// <summary>
-        /// Publishes an event with the current publish config.
+        /// Publishes an event using the current fluent config. Takes that config for this publish and replaces the static Setting with a new one from the pool; when publish ends, the used config is cleared and returned to the pool.
         /// </summary>
         /// <typeparam name="TGenEvent">The event type.</typeparam>
         /// <param name="gameEvent">The event to publish.</param>
@@ -19,15 +19,15 @@ namespace GenEvent
         public static bool Publish<TGenEvent>(this TGenEvent gameEvent)
             where TGenEvent : struct, IGenEvent<TGenEvent>
         {
-            PublishConfig<TGenEvent>.Push();
+            var config = PublishConfig<TGenEvent>.TakeForPublish();
             try
             {
                 var publisher = BaseEventPublisher.Publishers[typeof(TGenEvent)];
-                return publisher.Publish(gameEvent);
+                return publisher.Publish(gameEvent, config);
             }
             finally
             {
-                PublishConfig<TGenEvent>.Pop();
+                PublishConfig<TGenEvent>.ReturnUsedConfig(config);
             }
         }
 
@@ -149,15 +149,14 @@ namespace GenEvent
         }
 
         /// <summary>
-        /// Invokes the event publishing.
-        /// This method is used by the generated event publisher code.
-        /// Do not call this method directly.
+        /// Invokes the event publishing for one subscriber type. Used by generated publisher code; config is the one passed from the Publish entry for this publish.
         /// </summary>
         /// <typeparam name="TSubscriber">The type of subscriber.</typeparam>
         /// <typeparam name="TGenEvent">The event type.</typeparam>
         /// <param name="gameEvent">The event to publish.</param>
+        /// <param name="config">The publish config for this Publish (filters, Cancelable).</param>
         /// <returns>True if all subscribers successfully handled the event; false if any subscriber cancelled propagation (event stopped before reaching all subscribers)</returns>
-        public static bool Invoke<TSubscriber, TGenEvent>(this TGenEvent gameEvent)
+        public static bool Invoke<TSubscriber, TGenEvent>(this TGenEvent gameEvent, PublishConfig<TGenEvent> config)
             where TGenEvent : struct, IGenEvent<TGenEvent>
             where TSubscriber : class
         {
@@ -168,12 +167,12 @@ namespace GenEvent
             for (int i = 0; i < subscribers.Count; i++)
             {
                 var subscriber = subscribers[i];
-                if (PublishConfig<TGenEvent>.Current.IsFiltered(subscriber))
+                if (config.IsFiltered(subscriber))
                     continue;
 
                 var shouldContinue = genEvent?.Invoke(gameEvent, subscriber) ?? true;
 
-                if (!PublishConfig<TGenEvent>.Current.Cancelable || shouldContinue) continue;
+                if (!config.Cancelable || shouldContinue) continue;
                 completed = false;
                 break;
             }

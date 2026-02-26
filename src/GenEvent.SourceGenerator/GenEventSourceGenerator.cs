@@ -254,7 +254,7 @@ namespace GenEvent.SourceGenerator
             var invocations = new StringBuilder();
             foreach (var sub in subscriberList)
             {
-                invocations.AppendLine($"        completed = @event.Invoke<{sub.SubscriberType.ToDisplayString()}, TGenEvent>();");
+                invocations.AppendLine($"        completed = @event.Invoke<{sub.SubscriberType.ToDisplayString()}, TGenEvent>(config);");
                 invocations.AppendLine("        if (!completed) return false;");
                 invocations.AppendLine();
             }

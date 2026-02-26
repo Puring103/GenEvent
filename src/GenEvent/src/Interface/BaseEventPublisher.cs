@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using GenEvent;
 
 namespace GenEvent.Interface
 {
@@ -16,11 +17,12 @@ namespace GenEvent.Interface
         /// </summary>
         /// <typeparam name="TGenEvent">Type of event to publish</typeparam>
         /// <param name="event">The event instance to publish</param>
+        /// <param name="config">The publish config for this publish (filters, Cancelable), passed from the Publish entry.</param>
         /// <returns>
         /// true if all subscribers successfully handled the event;
         /// false if any subscriber cancelled propagation (event stopped before reaching all subscribers)
         /// </returns>
-        public abstract bool Publish<TGenEvent>(TGenEvent @event)
+        public abstract bool Publish<TGenEvent>(TGenEvent @event, PublishConfig<TGenEvent> config)
             where TGenEvent : struct, IGenEvent<TGenEvent>;
     }
 }

@@ -6,6 +6,9 @@ namespace GenEvent
 {
     /// <summary>
     /// Configuration for event publishing.
+    /// Fluent configuration is done on the static <see cref="Setting"/>.
+    /// When <see cref="Publish"/> runs, the config is taken via <see cref="TakeForPublish"/> and the static Setting is replaced with a new instance from the pool;
+    /// the config is passed through the publish call chain as a parameter. When publish ends, <see cref="ReturnUsedConfig"/> clears and returns the config to the pool.
     /// </summary>
     /// <typeparam name="TGenEvent">The event type.</typeparam>
     public class PublishConfig<TGenEvent>
@@ -24,54 +27,28 @@ namespace GenEvent
         private List<Predicate<object>> SubscriberFilters { get; } = new(16);
 
         /// <summary>
-        /// Stack of publish configs for supporting nested publish calls.
-        /// </summary>
-        private static readonly Stack<PublishConfig<TGenEvent>> Stack = new(PoolCapacity);
-
-        /// <summary>
         /// Pool of publish configs to avoid allocating new publish configs.
         /// </summary>
         private static readonly List<PublishConfig<TGenEvent>> Pool = new(PoolCapacity);
 
         private static PublishConfig<TGenEvent> _setting;
-        private static PublishConfig<TGenEvent> _mainInstance;
 
         /// <summary>
-        /// The config currently being set up. After completing configuration, call <see cref="Push"/> to push it onto the stack and obtain a new config from the pool.
+        /// The single static config used for fluent configuration before Publish.
+        /// Extension methods such as Cancelable, WithFilter, OnlyType operate on this object.
         /// </summary>
         public static PublishConfig<TGenEvent> Setting
         {
             get
             {
                 if (_setting == null)
-                {
                     _setting = new PublishConfig<TGenEvent>();
-                    _mainInstance = _setting;
-                }
                 return _setting;
             }
         }
 
         /// <summary>
-        /// The config used during publish calls. Returns the top of the stack, or the current config being set up if the stack is empty.
-        /// </summary>
-        public static PublishConfig<TGenEvent> Current
-        {
-            get
-            {
-                if (Stack.Count > 0)
-                    return Stack.Peek();
-                if (_setting == null)
-                {
-                    _setting = new PublishConfig<TGenEvent>();
-                    _mainInstance = _setting;
-                }
-                return _setting;
-            }
-        }
-
-        /// <summary>
-        /// Gets a publish config from the pool.
+        /// Gets a publish config from the pool (already cleared).
         /// </summary>
         /// <returns>A publish config from the pool.</returns>
         private static PublishConfig<TGenEvent> GetFromPool()
@@ -88,12 +65,26 @@ namespace GenEvent
         }
 
         /// <summary>
-        /// Returns a publish config to the pool.
+        /// Takes the current Setting for use in this Publish, and replaces the static Setting with a new instance from the pool.
+        /// Call this at Publish entry; pass the returned config through the publish call chain.
         /// </summary>
-        /// <param name="config">The publish config to return to the pool.</param>
-        private static void ReturnToPool(PublishConfig<TGenEvent> config)
+        /// <returns>The config to use for this Publish.</returns>
+        public static PublishConfig<TGenEvent> TakeForPublish()
         {
-            if (config == _mainInstance)
+            if (_setting == null)
+                _setting = new PublishConfig<TGenEvent>();
+            var configToUse = _setting;
+            _setting = GetFromPool();
+            return configToUse;
+        }
+
+        /// <summary>
+        /// Clears the used config and returns it to the pool. Call when Publish ends so the config can be reused and does not leak previous filter/cancel state.
+        /// </summary>
+        /// <param name="config">The config that was used for the completed Publish.</param>
+        public static void ReturnUsedConfig(PublishConfig<TGenEvent> config)
+        {
+            if (config == null)
                 return;
             config.Clear();
             if (Pool.Count < PoolCapacity)
@@ -101,33 +92,7 @@ namespace GenEvent
         }
 
         /// <summary>
-        /// Call after finishing configuration: pushes the current <see cref="Setting"/> onto the stack, and obtains a new config from the pool to assign to Setting.
-        /// </summary>
-        public static void Push()
-        {
-            if (_setting == null)
-            {
-                _setting = new PublishConfig<TGenEvent>();
-                _mainInstance = _setting;
-            }
-            Stack.Push(_setting);
-            _setting = GetFromPool();
-        }
-
-        /// <summary>
-        /// Call after publishing ends: pops the stack and returns the config that was just used to the pool.
-        /// </summary>
-        public static void Pop()
-        {
-            var used = Stack.Pop();
-            ReturnToPool(used);
-            _setting = Stack.Count > 0 ? Stack.Peek() : _mainInstance;
-            if (Stack.Count == 0)
-                _setting.Clear();
-        }
-
-        /// <summary>
-        /// Clears the publish config.
+        /// Clears the publish config (Cancelable and filters).
         /// </summary>
         private void Clear()
         {
