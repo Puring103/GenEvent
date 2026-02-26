@@ -103,6 +103,38 @@ public class CoreFlowTests
     }
 
     [Test]
+    public void VoidReturnSubscriber_ReceivesEvent_AndPublishReturnsTrue()
+    {
+        var subscriber = new VoidReturnSubscriber();
+        subscriber.StartListening();
+
+        var evt = new TestEventA { Value = 99 };
+        var result = evt.Publish();
+
+        Assert.That(result, Is.True);
+        Assert.That(subscriber.ReceiveCount, Is.EqualTo(1));
+        Assert.That(subscriber.LastValue, Is.EqualTo(99));
+    }
+
+    [Test]
+    public void VoidAndBoolSubscribers_Mixed_VoidTreatedAsContinue_BoolCancelStopsPropagation()
+    {
+        var voidSub = new VoidReturnSubscriber();
+        var cancelSub = new CancelSubscriber { ShouldCancel = true };
+        var lowSub = new LowPrioritySubscriberForA();
+        voidSub.StartListening();
+        cancelSub.StartListening();
+        lowSub.StartListening();
+
+        var result = new TestEventA { Value = 1 }.Cancelable().Publish();
+
+        Assert.That(result, Is.False);
+        Assert.That(voidSub.ReceiveCount, Is.EqualTo(1), "Void handler runs first (High)");
+        Assert.That(cancelSub.ReceiveCount, Is.EqualTo(1), "Bool handler runs and returns false");
+        Assert.That(lowSub.ReceiveCount, Is.EqualTo(0), "Low-priority subscriber should not run after cancel");
+    }
+
+    [Test]
     public void DifferentEventTypes_DoNotInterfere()
     {
         var subA = new SubscriberA();

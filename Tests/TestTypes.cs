@@ -100,6 +100,33 @@ public class CancelSubscriber
     }
 }
 
+// Sync void handler for TestEventA (treated as continue).
+public class VoidReturnSubscriber
+{
+    public int ReceiveCount;
+    public int LastValue;
+
+    [OnEvent(SubscriberPriority.High)]
+    public void OnTestEventA(TestEventA e)
+    {
+        ReceiveCount++;
+        LastValue = e.Value;
+    }
+}
+
+// Low priority for TestEventA; used to verify cancel stops propagation (e.g. after VoidReturnSubscriber + CancelSubscriber).
+public class LowPrioritySubscriberForA
+{
+    public int ReceiveCount;
+
+    [OnEvent(SubscriberPriority.Low)]
+    public bool OnTestEventA(TestEventA e)
+    {
+        ReceiveCount++;
+        return true;
+    }
+}
+
 // Priority test subscribers
 public class PrimaryPrioritySubscriber
 {

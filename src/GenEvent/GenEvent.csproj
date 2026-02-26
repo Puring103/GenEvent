@@ -9,7 +9,7 @@
   <PropertyGroup>
     <SourceCodeDir>$(MSBuildProjectDirectory)\src\</SourceCodeDir>
     <UnityRuntimeDir>$(MSBuildProjectDirectory)\..\GenEvent.Unity\Assets\Plugins\GenEvent\Runtime\</UnityRuntimeDir>
-    <GenerateDocumentationFile>True</GenerateDocumentationFile>
+    <GenerateDocumentationFile>False</GenerateDocumentationFile>
     <DocumentationFile></DocumentationFile>
   </PropertyGroup>
 
