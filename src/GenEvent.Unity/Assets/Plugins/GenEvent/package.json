@@ -1,9 +1,9 @@
 {
-  "name": "com.wtlllll.genevent",
+  "name": "com.puring.genevent",
   "displayName": "GenEvent",
   "version": "1.0.0",
-  "unity": "2021.3",
-  "description": "GenEvent runtime and editor integration for Unity. Provides event-sourcing style code generation and utilities for C# projects.",
+  "unity": "2022.3",
+  "description": "GenEvent is a high-performance, 0GC and attribute-based Event library using code generation, without runtime reflection.",
   "keywords": [
     "event",
     "event-sourcing",
@@ -11,11 +11,10 @@
     "genevent"
   ],
   "author": {
-    "name": "wtl",
+    "name": "puring",
     "email": "",
     "url": "https://github.com/wtlllll190812/GenEvent"
   },
   "license": "MIT",
-  "dependencies": {
-  }
+  "dependencies": {}
 }

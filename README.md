@@ -53,11 +53,13 @@ GenEvent 是一个高性能,0GC的Event库，使用代码生成器实现,无运�
 </ItemGroup>
 ```
 
-目标框架 netstandard2.0，.NET 与 Unity 均可使用。Unity 项目可通过引用 GenEvent.Unity 或复制其 **Assets/Plugins/GenEvent** 下的 Runtime（以及如需的 Editor/SourceGenerator）到自己的 Assets 使用；**Plugins 目录内的代码为构建/生成产物，请勿手改**。
+目标框架 netstandard2.0，.NET 与 Unity 均可使用。Unity 项目推荐通过 **Unity Package Manager** 使用 Git URL 导入（见下文「Unity 项目」小节），也可以直接引用 GenEvent.Unity 工程。
 
 ## Unity 项目
 
-- **Plugins 使用**：使用 GenEvent.Unity 时，将 **Assets/Plugins/GenEvent** 下的 Runtime（及如需的 Editor/SourceGenerator）引用或复制到你的 Unity 工程即可；该目录为构建时自动生成，请勿手改其中代码。
+- **通过 Git 导入（推荐）**：在 Unity 中打开 `Window > Package Manager`，点击左上角 **Add** 按钮选择 **Add package from git URL...**，输入  
+  `https://github.com/wtlllll190812/GenEvent.git?path=src/GenEvent.Unity/Assets/Plugins/GenEvent`  
+  并确认，即可将 GenEvent 作为一个 Unity 包导入项目。
 - **自动初始化**：当编译时检测到引用了 **UnityEngine** 或 **UnityEditor** 时，源码生成器会为 `GenEventBootstrap.Init` 自动添加 `[UnityEngine.RuntimeInitializeOnLoadMethod(UnityEngine.RuntimeInitializeLoadType.AfterAssembliesLoaded)]`，因此 **Unity 中可在不手动调用 Init 的情况下，在程序启动时自动完成注册**。若仍需自定义时机，可在场景加载或入口处自行调用 `GenEventBootstrap.Init()`。
 
 ## 最小示例
