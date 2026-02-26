@@ -1,6 +1,6 @@
 # GenEvent
 
-[.NET](https://github.com/Puring103/GenEvent/actions/workflows/dotnet.yml)
+[![.NET](https://github.com/Puring103/GenEvent/actions/workflows/dotnet.yml/badge.svg)](https://github.com/Puring103/GenEvent/actions/workflows/dotnet.yml)
 
 GenEvent 是一个高性能、0 GC 的事件库，通过源码生成器在编译期生成全部派发代码，无运行时反射，兼容 .NET 与 Unity（netstandard2.0）。
 
