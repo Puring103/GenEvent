@@ -3,17 +3,32 @@
   <PropertyGroup>
     <TargetFramework>netstandard2.0</TargetFramework>
     <LangVersion>9</LangVersion>
+    <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
+	  <VersionPrefix>0.9.3</VersionPrefix>
   </PropertyGroup>
 
-  <!-- 定义源目录和目标目录 -->
   <PropertyGroup>
     <SourceCodeDir>$(MSBuildProjectDirectory)\src\</SourceCodeDir>
     <UnityRuntimeDir>$(MSBuildProjectDirectory)\..\GenEvent.Unity\Assets\Plugins\GenEvent\Runtime\</UnityRuntimeDir>
     <GenerateDocumentationFile>False</GenerateDocumentationFile>
     <DocumentationFile></DocumentationFile>
+    <Authors>Puring</Authors>
+    <Company>Biekka Games</Company>
+    <Copyright>This project is licensed under the MIT License. Copyright (c) 2026 Puring.</Copyright>
+    <PackageProjectUrl>https://github.com/Puring103/GenEvent</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/Puring103/GenEvent</RepositoryUrl>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <PackageTags>event;unity;sourcegenerator;</PackageTags>
+    <Description>A high-performance, 0GC and attribute-based Event library for both .Net and Unity, which using code generation and without runtime reflection</Description>
+    <IncludeSymbols>False</IncludeSymbols>
   </PropertyGroup>
 
-  <!-- 收集所有源码文件 -->
+  <!-- 源生成器 DLL 路径（用于打包进当前 NuGet 包的 analyzers 目录） -->
+  <PropertyGroup>
+    <GenEventSourceGeneratorDll>..\GenEvent.SourceGenerator\bin\$(Configuration)\netstandard2.0\GenEvent.SourceGenerator.dll</GenEventSourceGeneratorDll>
+  </PropertyGroup>
+
   <ItemGroup>
     <SourceFiles Include="$(SourceCodeDir)**\*.cs" />
   </ItemGroup>
@@ -33,6 +48,20 @@
     
     <Message Text="源码复制完成！" Importance="high" />
   </Target>
+  <ItemGroup>
+    <None Include="..\..\README.md">
+      <Pack>True</Pack>
+      <PackagePath>\</PackagePath>
+    </None>
+  </ItemGroup>
+
+  <!-- 将源生成器 DLL 打进当前 NuGet 包的 analyzers 目录 -->
+  <ItemGroup>
+    <None Include="$(GenEventSourceGeneratorDll)"
+          Pack="true"
+          PackagePath="analyzers/dotnet/cs"
+          Visible="false" />
+  </ItemGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\GenEvent.SourceGenerator\GenEvent.SourceGenerator.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="false" />

@@ -3,6 +3,8 @@
   <PropertyGroup>
     <TargetFramework>netstandard2.0</TargetFramework>
     <LangVersion>9</LangVersion>
+<!--    <GeneratePackageOnBuild>true</GeneratePackageOnBuild>-->
+<!--	<VersionPrefix>0.9.3</VersionPrefix>-->
   </PropertyGroup>
 
   <ItemGroup>
@@ -26,10 +28,7 @@
     <MakeDir Directories="$(UnitySourceGeneratorDir)" Condition="!Exists('$(UnitySourceGeneratorDir)')" />
     
     <!-- 复制 .dll 文件 -->
-    <Copy
-      SourceFiles="$(OutputPath)$(AssemblyName).dll"
-      DestinationFolder="$(UnitySourceGeneratorDir)"
-      SkipUnchangedFiles="true" />
+    <Copy SourceFiles="$(OutputPath)$(AssemblyName).dll" DestinationFolder="$(UnitySourceGeneratorDir)" SkipUnchangedFiles="true" />
     
     <Message Text="Source Generator 文件复制完成！" Importance="high" />
   </Target>
