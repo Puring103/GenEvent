@@ -22,7 +22,6 @@ jobs:
         id: get_version
         shell: bash
         run: |
-          # 从 refs/tags/v0.9.1 中提取 0.9.1
           TAG="${GITHUB_REF#refs/tags/}"
           VERSION="${TAG#v}"
           echo "VERSION=$VERSION" >> $GITHUB_ENV
