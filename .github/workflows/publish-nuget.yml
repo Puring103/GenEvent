@@ -36,4 +36,5 @@ jobs:
         run: dotnet pack src/GenEvent/GenEvent.csproj -c Release --no-build -p:PackageVersion=${{ env.VERSION }} -o out
 
       - name: Push packages to NuGet
-        run: dotnet nuget push out/*.nupkg --api-key ${{ secrets.NUGET_API_KEY }} --source https://api.nuget.org/v3/index.json --skip-duplicate
+        shell: bash
+        run: dotnet nuget push "out/*.nupkg" --api-key ${{ secrets.NUGET_API_KEY }} --source https://api.nuget.org/v3/index.json --skip-duplicate
