@@ -16,7 +16,7 @@ jobs:
       - name: Set up .NET
         uses: actions/setup-dotnet@v4
         with:
-          dotnet-version: "8.0.x" # 根据你的项目版本调整
+          dotnet-version: "8.0.x"
 
       - name: Extract version from tag
         id: get_version
@@ -29,7 +29,9 @@ jobs:
       - name: Restore
         run: dotnet restore
 
-      # 如果你要发布多个包（比如 GenEvent 和 GenEvent.SourceGenerator），可以写多个 pack
+      - name: Build (Release)
+        run: dotnet build -c Release --no-restore
+
       - name: Pack GenEvent
         run: dotnet pack src/GenEvent/GenEvent.csproj -c Release -p:PackageVersion=${{ env.VERSION }} -o out
 
