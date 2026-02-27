@@ -4,7 +4,6 @@
     <TargetFramework>netstandard2.0</TargetFramework>
     <LangVersion>9</LangVersion>
     <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
-	  <VersionPrefix>0.9.3</VersionPrefix>
   </PropertyGroup>
 
   <PropertyGroup>
@@ -14,7 +13,7 @@
     <DocumentationFile></DocumentationFile>
     <Authors>Puring</Authors>
     <Company>Biekka Games</Company>
-    <Copyright>This project is licensed under the MIT License. Copyright (c) 2026 Puring.</Copyright>
+    <Copyright>Copyright (c) 2026 Puring.</Copyright>
     <PackageProjectUrl>https://github.com/Puring103/GenEvent</PackageProjectUrl>
     <RepositoryUrl>https://github.com/Puring103/GenEvent</RepositoryUrl>
     <PackageReadmeFile>README.md</PackageReadmeFile>
