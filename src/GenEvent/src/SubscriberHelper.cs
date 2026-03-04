@@ -60,7 +60,7 @@ namespace GenEvent
         public static SubscriptionHandle StartListening<TSubscriber>(this TSubscriber subscriber)
             where TSubscriber : class
         {
-            if (BaseSubscriberRegistry.Subscribers.TryGetValue(typeof(TSubscriber), out var iSubscriber))
+            if (BaseSubscriberRegistry.Subscribers.TryGetValue(subscriber.GetType(), out var iSubscriber))
             {
                 iSubscriber.StartListening(subscriber);
             }
@@ -75,7 +75,7 @@ namespace GenEvent
         public static void StopListening<TSubscriber>(this TSubscriber subscriber)
             where TSubscriber : class
         {
-            if (BaseSubscriberRegistry.Subscribers.TryGetValue(typeof(TSubscriber), out var iSubscriber))
+            if (BaseSubscriberRegistry.Subscribers.TryGetValue(subscriber.GetType(), out var iSubscriber))
             {
                 iSubscriber.StopListening(subscriber);
             }

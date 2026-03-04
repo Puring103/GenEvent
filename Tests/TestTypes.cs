@@ -581,3 +581,85 @@ public class AsyncThrowingSubscriber
         throw new InvalidOperationException("AsyncThrowingSubscriber failure");
     }
 }
+
+// ---- Inheritance tests ----
+
+public struct InheritTestEvent : IGenEvent<InheritTestEvent>
+{
+    public int Value;
+}
+
+public struct InheritTestEventB : IGenEvent<InheritTestEventB>
+{
+    public int Value;
+}
+
+/// <summary>
+/// Base class with no [OnEvent] methods. Provides Subscribe/Unsubscribe helpers
+/// that call this.StartListening() / this.StopListening() — TSubscriber is inferred
+/// as InheritBase at compile time, so the fix (GetType() lookup) is required for
+/// subclasses to be correctly registered.
+/// </summary>
+public class InheritBase
+{
+    public SubscriptionHandle Subscribe() => this.StartListening();
+    public void Unsubscribe() => this.StopListening();
+}
+
+/// <summary>Single [OnEvent] on the child class.</summary>
+public class InheritChild : InheritBase
+{
+    public int ReceiveCount;
+    public int LastValue;
+
+    [OnEvent]
+    public void OnInheritTestEvent(InheritTestEvent e)
+    {
+        ReceiveCount++;
+        LastValue = e.Value;
+    }
+}
+
+/// <summary>Child that handles two event types, used to verify all subscriptions
+/// are registered when StartListening is called from the base class.</summary>
+public class InheritChildMultiEvent : InheritBase
+{
+    public int EventACount;
+    public int EventBCount;
+
+    [OnEvent]
+    public void OnInheritTestEvent(InheritTestEvent e) => EventACount++;
+
+    [OnEvent]
+    public void OnInheritTestEventB(InheritTestEventB e) => EventBCount++;
+}
+
+/// <summary>
+/// GrandChild inherits from InheritChild and has its own [OnEvent].
+/// When StartListening is called (even via InheritBase.Subscribe), only
+/// GrandChild's own registry is used — handlers inherited from InheritChild
+/// are NOT automatically bridged (compile-time limitation; users must call
+/// StartListening separately if both layers are needed).
+/// </summary>
+public class InheritGrandChild : InheritChild
+{
+    public int GrandChildReceiveCount;
+
+    [OnEvent]
+    public void OnInheritTestEventB(InheritTestEventB e) => GrandChildReceiveCount++;
+}
+
+/// <summary>Child with async [OnEvent], to verify async path also works via base Subscribe.</summary>
+public class InheritChildAsync : InheritBase
+{
+    public int ReceiveCount;
+    public int LastValue;
+
+    [OnEvent]
+    public async Task OnInheritTestEvent(InheritTestEvent e)
+    {
+        await Task.Yield();
+        ReceiveCount++;
+        LastValue = e.Value;
+    }
+}

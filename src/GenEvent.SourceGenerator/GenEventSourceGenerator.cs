@@ -371,8 +371,10 @@ namespace GenEvent.SourceGenerator
 
                 if (seenEventTypes.Add(eventType))
                 {
-                    startCalls.AppendLine($"        StartListening<TSubscriber, {eventType.ToDisplayString()}>(self);");
-                    stopCalls.AppendLine($"        StopListening<TSubscriber, {eventType.ToDisplayString()}>(self);");
+                    var concreteType = sub.SubscriberType.ToDisplayString();
+                    var evtType = eventType.ToDisplayString();
+                    startCalls.AppendLine($"        GenEventRegistry<{evtType}, {concreteType}>.Register(({concreteType})(object)self);");
+                    stopCalls.AppendLine($"        GenEventRegistry<{evtType}, {concreteType}>.UnRegister(({concreteType})(object)self);");
                 }
             }
 
