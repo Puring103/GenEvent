@@ -134,8 +134,8 @@ namespace GenEvent.SourceGenerator
         {
             var subscribers = new List<SubscriberInfo>();
             var diagnostics = new List<Diagnostic>();
-            // Per (class, eventType): list of (method, location, isAsync). At most one sync and one async allowed.
-            var eventMethodsByClass = new Dictionary<INamedTypeSymbol, Dictionary<INamedTypeSymbol, List<(IMethodSymbol method, Location loc, bool isAsync)>>>(SymbolEqualityComparer.Default);
+            // Per (class, eventType): list of (method, location, isAsync, priority). At most one sync and one async allowed.
+            var eventMethodsByClass = new Dictionary<INamedTypeSymbol, Dictionary<INamedTypeSymbol, List<(IMethodSymbol method, Location loc, bool isAsync, SubscriberPriority priority)>>>(SymbolEqualityComparer.Default);
 
             var taskSymbol = compilation.GetTypeByMetadataName(TaskMetadataName);
             var taskOfTSymbol = compilation.GetTypeByMetadataName(TaskOfTMetadataName);
@@ -225,10 +225,10 @@ namespace GenEvent.SourceGenerator
                         continue;
 
                     if (!eventMethodsByClass.TryGetValue(containingType, out var eventDict))
-                        eventMethodsByClass[containingType] = eventDict = new Dictionary<INamedTypeSymbol, List<(IMethodSymbol, Location, bool)>>(SymbolEqualityComparer.Default);
+                        eventMethodsByClass[containingType] = eventDict = new Dictionary<INamedTypeSymbol, List<(IMethodSymbol, Location, bool, SubscriberPriority)>>(SymbolEqualityComparer.Default);
 
                     if (!eventDict.TryGetValue(paramType, out var list))
-                        eventDict[paramType] = list = new List<(IMethodSymbol, Location, bool)>();
+                        eventDict[paramType] = list = new List<(IMethodSymbol, Location, bool, SubscriberPriority)>();
 
                     if (list.Any(t => t.isAsync == isAsync))
                     {
@@ -237,7 +237,6 @@ namespace GenEvent.SourceGenerator
                             methodDecl.GetLocation()));
                         continue;
                     }
-                    list.Add((methodSymbol, methodDecl.GetLocation(), isAsync));
 
                     var priority = SubscriberPriority.Medium;
                     if (onEventAttr.ConstructorArguments.Length > 0 &&
@@ -245,6 +244,7 @@ namespace GenEvent.SourceGenerator
                     {
                         priority = (SubscriberPriority)priorityVal;
                     }
+                    list.Add((methodSymbol, methodDecl.GetLocation(), isAsync, priority));
 
                     subscribers.Add(new SubscriberInfo
                     {
@@ -254,6 +254,67 @@ namespace GenEvent.SourceGenerator
                         Priority = priority,
                         IsAsync = isAsync
                     });
+                }
+            }
+
+            // Second pass: inject SubscriberInfo entries for derived classes that inherit [OnEvent]
+            // handlers from ancestors but don't redeclare [OnEvent] for those event types.
+            // This allows GameManager2 (no override) and GameManager3 (override without [OnEvent])
+            // to receive events via virtual dispatch, fixing Issue #1.
+            var allConcreteClasses = new List<INamedTypeSymbol>();
+            foreach (var tree in compilation.SyntaxTrees)
+            {
+                var root = tree.GetRoot();
+                var model = compilation.GetSemanticModel(tree);
+                foreach (var classDecl in root.DescendantNodes().OfType<ClassDeclarationSyntax>())
+                {
+                    if (model.GetDeclaredSymbol(classDecl, context.CancellationToken) is INamedTypeSymbol sym
+                        && !sym.IsAbstract
+                        && sym.TypeKind == TypeKind.Class
+                        && sym.TypeParameters.Length == 0)
+                    {
+                        allConcreteClasses.Add(sym);
+                    }
+                }
+            }
+
+            foreach (var classType in allConcreteClasses)
+            {
+                // Collect event types already directly handled by this class (own [OnEvent])
+                var coveredEvents = new HashSet<INamedTypeSymbol>(SymbolEqualityComparer.Default);
+                if (eventMethodsByClass.TryGetValue(classType, out var ownDict))
+                {
+                    foreach (var et in ownDict.Keys)
+                        coveredEvents.Add(et);
+                }
+
+                // Walk base class chain; for each event type first found in an ancestor,
+                // add an inherited SubscriberInfo for this derived class.
+                var baseType = classType.BaseType;
+                while (baseType != null && baseType.SpecialType != SpecialType.System_Object)
+                {
+                    if (eventMethodsByClass.TryGetValue(baseType, out var baseDict))
+                    {
+                        foreach (var kvp in baseDict)
+                        {
+                            var eventType = kvp.Key;
+                            if (!coveredEvents.Add(eventType))
+                                continue; // Already handled by this class or a closer ancestor
+
+                            foreach (var (method, _, isAsync, inheritedPriority) in kvp.Value)
+                            {
+                                subscribers.Add(new SubscriberInfo
+                                {
+                                    SubscriberType = classType,
+                                    Method = method,
+                                    EventType = eventType,
+                                    Priority = inheritedPriority,
+                                    IsAsync = isAsync
+                                });
+                            }
+                        }
+                    }
+                    baseType = baseType.BaseType;
                 }
             }
 

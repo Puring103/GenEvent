@@ -137,6 +137,40 @@ public class InheritanceTests
         grand.Unsubscribe();
     }
 
+    /// <summary>
+    /// GrandChild inherits InheritTestEvent from InheritChild (via virtual dispatch).
+    /// Calling Subscribe() once must register it for BOTH InheritTestEvent and InheritTestEventB.
+    /// </summary>
+    [Test]
+    public void GrandChildClass_StartListeningViaBase_AlsoReceivesInheritedBaseEvent()
+    {
+        var grand = new InheritGrandChild();
+        grand.Subscribe();
+
+        new InheritTestEvent { Value = 99 }.Publish();
+
+        Assert.That(grand.ReceiveCount, Is.EqualTo(1), "InheritGrandChild should also receive InheritTestEvent inherited from InheritChild.");
+        grand.Unsubscribe();
+    }
+
+    [Test]
+    public void GrandChildClass_Unsubscribe_StopsBothEventTypes()
+    {
+        var grand = new InheritGrandChild();
+        grand.Subscribe();
+
+        new InheritTestEvent { Value = 1 }.Publish();
+        new InheritTestEventB { Value = 2 }.Publish();
+        Assert.That(grand.ReceiveCount, Is.EqualTo(1));
+        Assert.That(grand.GrandChildReceiveCount, Is.EqualTo(1));
+
+        grand.Unsubscribe();
+        new InheritTestEvent { Value = 3 }.Publish();
+        new InheritTestEventB { Value = 4 }.Publish();
+        Assert.That(grand.ReceiveCount, Is.EqualTo(1), "Should not receive InheritTestEvent after Unsubscribe.");
+        Assert.That(grand.GrandChildReceiveCount, Is.EqualTo(1), "Should not receive InheritTestEventB after Unsubscribe.");
+    }
+
     // ------------------------------------------------------------------
     // Multiple instances
     // ------------------------------------------------------------------
