@@ -635,11 +635,10 @@ public class InheritChildMultiEvent : InheritBase
 }
 
 /// <summary>
-/// GrandChild inherits from InheritChild and has its own [OnEvent].
-/// When StartListening is called (even via InheritBase.Subscribe), only
-/// GrandChild's own registry is used — handlers inherited from InheritChild
-/// are NOT automatically bridged (compile-time limitation; users must call
-/// StartListening separately if both layers are needed).
+/// GrandChild inherits from InheritChild and has its own [OnEvent] for InheritTestEventB.
+/// When StartListening is called (even via InheritBase.Subscribe), GrandChild is
+/// registered for BOTH InheritTestEventB (own handler) and InheritTestEvent
+/// (inherited from InheritChild via virtual dispatch).
 /// </summary>
 public class InheritGrandChild : InheritChild
 {
