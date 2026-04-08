@@ -27,7 +27,7 @@ using System.CodeDom.Compiler;
 namespace GenEvent
 {
 [GeneratedCode(""GenEvent"",""V0.5"")]
-public class {EventName}Publisher : BaseEventPublisher
+public class {EventClassName} : BaseEventPublisher
 {
     public override bool Publish<TGenEvent>(TGenEvent @event, PublishConfig<TGenEvent> config)
     {
@@ -73,9 +73,9 @@ using System.CodeDom.Compiler;
 namespace GenEvent
 {
 [GeneratedCode(""GenEvent"",""V0.5"")]
-public class {SubscriberName}SubscriberRegistry : BaseSubscriberRegistry
+public class {SubscriberRegistryClassName} : BaseSubscriberRegistry
 {
-    static {SubscriberName}SubscriberRegistry()
+    static {SubscriberRegistryClassName}()
     {
 {EventRegistrations}
     }

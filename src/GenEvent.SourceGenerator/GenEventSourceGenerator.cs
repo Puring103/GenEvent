@@ -48,8 +48,8 @@ namespace GenEvent.SourceGenerator
                     return;
                 }
 
-                var events = CollectEvents(compilation, iGenEventSymbol);
                 var (subscribers, diagnostics) = CollectSubscribers(compilation, onEventAttributeSymbol, context);
+                var events = CollectEvents(compilation, subscribers);
 
                 foreach (var d in diagnostics)
                     context.ReportDiagnostic(d);
@@ -66,7 +66,7 @@ namespace GenEvent.SourceGenerator
                     if (!eventToSubscribers.TryGetValue(evt.EventType, out var subList))
                         subList = new List<SubscriberInfo>();
                     var source = GenerateEventPublisher(evt, subList, eventPublisherTemplate);
-                    context.AddSource($"{evt.Name}Publisher.g.cs", SourceText.From(source, Encoding.UTF8));
+                    context.AddSource($"{evt.GeneratedPublisherName}.g.cs", SourceText.From(source, Encoding.UTF8));
                 }
 
                 foreach (var sub in subscribers.GroupBy(s => s.SubscriberType, SymbolEqualityComparer.Default).Select(g => g.First()))
@@ -74,14 +74,18 @@ namespace GenEvent.SourceGenerator
                     if (!subscriberToEvents.TryGetValue(sub.SubscriberType, out var evtList))
                         evtList = new List<(INamedTypeSymbol EventType, string MethodName, bool ReturnsBool, bool IsAsync)>();
                     var source = GenerateSubscriberRegistry(sub, evtList, subscriberRegistryTemplate);
-                    context.AddSource($"{sub.SubscriberType.Name}SubscriberRegistry.g.cs", SourceText.From(source, Encoding.UTF8));
+                    context.AddSource($"{GetGeneratedSubscriberRegistryName(sub.SubscriberType)}.g.cs", SourceText.From(source, Encoding.UTF8));
                 }
 
                 var publisherRegistrations = string.Join(Environment.NewLine,
-                    events.Select(e => $"        BaseEventPublisher.Publishers[typeof({e.FullName})] = new {e.Name}Publisher();"));
+                    events.Select(e => $"        BaseEventPublisher.Publishers[typeof({e.TypeDisplayName})] = new {e.GeneratedPublisherName}();"));
                 var subscriberRegs = subscribers.GroupBy(s => s.SubscriberType, SymbolEqualityComparer.Default);
                 var subscriberRegistrations = string.Join(Environment.NewLine,
-                    subscriberRegs.Select(g => $"        BaseSubscriberRegistry.Subscribers[typeof({g.Key.ToDisplayString()})] = new {g.Key.Name}SubscriberRegistry();"));
+                    subscriberRegs.Select(g =>
+                    {
+                        var subscriberType = (INamedTypeSymbol)g.Key;
+                        return $"        BaseSubscriberRegistry.Subscribers[typeof({GetFullyQualifiedTypeName(subscriberType)})] = new {GetGeneratedSubscriberRegistryName(subscriberType)}();";
+                    }));
 
                 var initAttribute = hasUnity
                     ? "[UnityEngine.RuntimeInitializeOnLoadMethod(UnityEngine.RuntimeInitializeLoadType.AfterAssembliesLoaded)]"
@@ -116,16 +120,18 @@ namespace GenEvent.SourceGenerator
             return false;
         }
 
-        private static List<EventInfo> CollectEvents(Compilation compilation, INamedTypeSymbol iGenEventSymbol)
+        private static List<EventInfo> CollectEvents(Compilation compilation, IReadOnlyList<SubscriberInfo> subscribers)
         {
             var result = new List<EventInfo>();
             var seen = new HashSet<INamedTypeSymbol>(SymbolEqualityComparer.Default);
 
             CollectEventsFromNamespace(compilation.Assembly.GlobalNamespace, compilation, result, seen);
 
-            foreach (var referencedAssembly in compilation.SourceModule.ReferencedAssemblySymbols)
+            foreach (var externalEventType in subscribers
+                         .Select(s => s.EventType)
+                         .Where(t => !SymbolEqualityComparer.Default.Equals(t.ContainingAssembly, compilation.Assembly)))
             {
-                CollectEventsFromNamespace(referencedAssembly.GlobalNamespace, compilation, result, seen);
+                AddEventInfo(externalEventType, result, seen);
             }
 
             return result;
@@ -154,20 +160,26 @@ namespace GenEvent.SourceGenerator
             List<EventInfo> result,
             HashSet<INamedTypeSymbol> seen)
         {
-            if (type.TypeKind == TypeKind.Struct && ImplementsIGenEvent(type, compilation) && seen.Add(type))
-            {
-                result.Add(new EventInfo
-                {
-                    EventType = type,
-                    Name = type.Name,
-                    FullName = type.ToDisplayString()
-                });
-            }
+            if (type.TypeKind == TypeKind.Struct && ImplementsIGenEvent(type, compilation))
+                AddEventInfo(type, result, seen);
 
             foreach (var nestedType in type.GetTypeMembers())
             {
                 CollectEventsFromType(nestedType, compilation, result, seen);
             }
+        }
+
+        private static void AddEventInfo(INamedTypeSymbol type, List<EventInfo> result, HashSet<INamedTypeSymbol> seen)
+        {
+            if (!seen.Add(type))
+                return;
+
+            result.Add(new EventInfo
+            {
+                EventType = type,
+                TypeDisplayName = GetFullyQualifiedTypeName(type),
+                GeneratedPublisherName = GetGeneratedPublisherName(type)
+            });
         }
 
         private static (List<SubscriberInfo> subscribers, List<Diagnostic> diagnostics) CollectSubscribers(
@@ -413,7 +425,7 @@ namespace GenEvent.SourceGenerator
                 if (sub.IsAsync) continue;
                 if (seenSyncTypes.Add(sub.SubscriberType))
                 {
-                    var subscriberTypeName = sub.SubscriberType.ToDisplayString();
+                    var subscriberTypeName = GetFullyQualifiedTypeName(sub.SubscriberType);
                     var snapshotVariableName = GetSubscriberSnapshotVariableName(sub.SubscriberType);
                     syncSnapshotDeclarations.AppendLine($"        var {snapshotVariableName} = GenEventRegistry<TGenEvent, {subscriberTypeName}>.TakeSubscribersSnapshot();");
                     syncSnapshotReturns.AppendLine($"            GenEventRegistry<TGenEvent, {subscriberTypeName}>.ReturnSubscribersSnapshot({snapshotVariableName});");
@@ -430,7 +442,7 @@ namespace GenEvent.SourceGenerator
             foreach (var sub in subscriberList)
             {
                 if (!seenAsyncTypes.Add(sub.SubscriberType)) continue;
-                var subscriberTypeName = sub.SubscriberType.ToDisplayString();
+                var subscriberTypeName = GetFullyQualifiedTypeName(sub.SubscriberType);
                 var snapshotVariableName = GetSubscriberSnapshotVariableName(sub.SubscriberType);
                 asyncSnapshotDeclarations.AppendLine($"        var {snapshotVariableName} = GenEventRegistry<TGenEvent, {subscriberTypeName}>.TakeSubscribersSnapshot();");
                 asyncSnapshotReturns.AppendLine($"            GenEventRegistry<TGenEvent, {subscriberTypeName}>.ReturnSubscribersSnapshot({snapshotVariableName});");
@@ -441,8 +453,8 @@ namespace GenEvent.SourceGenerator
 
             return template
                 .Replace("{UsingNamespaces}", usings)
-                .Replace("{EventName}", evt.Name)
-                .Replace("{EventFullName}", evt.FullName)
+                .Replace("{EventClassName}", evt.GeneratedPublisherName)
+                .Replace("{EventFullName}", evt.TypeDisplayName)
                 .Replace("{SubscriberSnapshots}", syncSnapshotDeclarations.ToString().TrimEnd())
                 .Replace("{SubscriberInvocations}", syncInvocations.ToString().TrimEnd())
                 .Replace("{SubscriberSnapshotReturns}", syncSnapshotReturns.ToString().TrimEnd())
@@ -454,6 +466,21 @@ namespace GenEvent.SourceGenerator
         private static string GetSubscriberSnapshotVariableName(INamedTypeSymbol subscriberType)
         {
             return "__genEventSnapshot_" + SanitizeIdentifier(subscriberType.ToDisplayString());
+        }
+
+        private static string GetGeneratedPublisherName(INamedTypeSymbol eventType)
+        {
+            return "GenEventPublisher_" + SanitizeIdentifier(GetFullyQualifiedTypeName(eventType));
+        }
+
+        private static string GetGeneratedSubscriberRegistryName(INamedTypeSymbol subscriberType)
+        {
+            return "GenEventSubscriberRegistry_" + SanitizeIdentifier(GetFullyQualifiedTypeName(subscriberType));
+        }
+
+        private static string GetFullyQualifiedTypeName(INamedTypeSymbol type)
+        {
+            return type.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
         }
 
         private static string SanitizeIdentifier(string value)
@@ -483,12 +510,14 @@ namespace GenEvent.SourceGenerator
 
             foreach (var (eventType, methodName, returnsBool, isAsync) in events)
             {
+                var eventTypeName = GetFullyQualifiedTypeName(eventType);
+                var subscriberTypeName = GetFullyQualifiedTypeName(sub.SubscriberType);
                 if (isAsync)
                 {
                     var returnExpr = returnsBool
                         ? "return await subscriber." + methodName + "(gameEvent);"
                         : "await subscriber." + methodName + "(gameEvent); return true;";
-                    eventRegistrations.AppendLine($"        GenEventRegistry<{eventType.ToDisplayString()}, {sub.SubscriberType.ToDisplayString()}>.InitializeAsync(async (gameEvent, subscriber) =>");
+                    eventRegistrations.AppendLine($"        GenEventRegistry<{eventTypeName}, {subscriberTypeName}>.InitializeAsync(async (gameEvent, subscriber) =>");
                     eventRegistrations.AppendLine("        {");
                     eventRegistrations.AppendLine($"            {returnExpr}");
                     eventRegistrations.AppendLine("        });");
@@ -496,7 +525,7 @@ namespace GenEvent.SourceGenerator
                 else
                 {
                     var returnExpr = returnsBool ? "return subscriber." + methodName + "(gameEvent);" : "subscriber." + methodName + "(gameEvent); return true;";
-                    eventRegistrations.AppendLine($"        GenEventRegistry<{eventType.ToDisplayString()}, {sub.SubscriberType.ToDisplayString()}>.Initialize((gameEvent, subscriber) =>");
+                    eventRegistrations.AppendLine($"        GenEventRegistry<{eventTypeName}, {subscriberTypeName}>.Initialize((gameEvent, subscriber) =>");
                     eventRegistrations.AppendLine("        {");
                     eventRegistrations.AppendLine($"            {returnExpr}");
                     eventRegistrations.AppendLine("        });");
@@ -505,8 +534,8 @@ namespace GenEvent.SourceGenerator
 
                 if (seenEventTypes.Add(eventType))
                 {
-                    var concreteType = sub.SubscriberType.ToDisplayString();
-                    var evtType = eventType.ToDisplayString();
+                    var concreteType = subscriberTypeName;
+                    var evtType = eventTypeName;
                     startCalls.AppendLine($"        GenEventRegistry<{evtType}, {concreteType}>.Register(({concreteType})(object)self);");
                     stopCalls.AppendLine($"        GenEventRegistry<{evtType}, {concreteType}>.UnRegister(({concreteType})(object)self);");
                 }
@@ -514,7 +543,7 @@ namespace GenEvent.SourceGenerator
 
             return template
                 .Replace("{UsingNamespaces}", usings)
-                .Replace("{SubscriberName}", sub.SubscriberType.Name)
+                .Replace("{SubscriberRegistryClassName}", GetGeneratedSubscriberRegistryName(sub.SubscriberType))
                 .Replace("{SubscriberFullName}", sub.SubscriberType.ToDisplayString())
                 .Replace("{EventRegistrations}", eventRegistrations.ToString().TrimEnd())
                 .Replace("{StartListeningCalls}", startCalls.ToString().TrimEnd())
@@ -548,8 +577,8 @@ namespace GenEvent.SourceGenerator
         private struct EventInfo
         {
             public INamedTypeSymbol EventType;
-            public string Name;
-            public string FullName;
+            public string TypeDisplayName;
+            public string GeneratedPublisherName;
         }
 
         private struct SubscriberInfo
