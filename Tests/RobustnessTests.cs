@@ -176,6 +176,52 @@ public class RobustnessTests
         }
     }
 
+    [Test]
+    public void Publish_SelfUnregisteringSubscriber_DoesNotThrowAndDeliversSnapshot()
+    {
+        GenEventBootstrap.Init();
+        var selfRemoving = new SelfUnregisteringSubscriber();
+        var trailing = new SelfUnregisteringSubscriber { RemoveSelfOnHandle = false };
+        selfRemoving.StartListening();
+        trailing.StartListening();
+
+        Assert.DoesNotThrow(() => new TestEventA { Value = 7 }.Publish());
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(selfRemoving.ReceiveCount, Is.EqualTo(1));
+            Assert.That(trailing.ReceiveCount, Is.EqualTo(1));
+        });
+
+        selfRemoving.StopListening();
+        trailing.StopListening();
+    }
+
+    [Test]
+    public void Publish_UnregisteringAnotherSubscriber_DoesNotThrowAndKeepsSnapshotOrder()
+    {
+        GenEventBootstrap.Init();
+        var removing = new RemovingOtherSubscriber();
+        var removed = new RemovingOtherSubscriber { RemoveTargetOnHandle = false };
+        var trailing = new RemovingOtherSubscriber { RemoveTargetOnHandle = false };
+        removing.Target = removed;
+        removing.StartListening();
+        removed.StartListening();
+        trailing.StartListening();
+
+        Assert.DoesNotThrow(() => new TestEventA { Value = 9 }.Publish());
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(removing.ReceiveCount, Is.EqualTo(1));
+            Assert.That(removed.ReceiveCount, Is.EqualTo(1));
+            Assert.That(trailing.ReceiveCount, Is.EqualTo(1));
+        });
+
+        removing.StopListening();
+        trailing.StopListening();
+    }
+
     private static void ClearBootstrapState()
     {
         BaseEventPublisher.Publishers.Clear();

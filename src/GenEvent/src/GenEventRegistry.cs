@@ -40,6 +40,8 @@ namespace GenEvent
     public static class GenEventRegistry<TGenEvent, TSubscriber>
         where TGenEvent : struct, IGenEvent<TGenEvent>
     {
+        private const int SnapshotPoolCapacity = 16;
+
         /// <summary>
         /// List of subscribers for iteration (no holes; removal uses swap-with-last).
         /// </summary>
@@ -49,6 +51,11 @@ namespace GenEvent
         /// Map from subscriber to index in SubscriberList, for O(1) removal.
         /// </summary>
         private static readonly Dictionary<TSubscriber, int> SubscriberIndex = new();
+
+        /// <summary>
+        /// Reusable snapshot buffers for publish-time iteration stability.
+        /// </summary>
+        private static readonly List<List<TSubscriber>> SnapshotPool = new(SnapshotPoolCapacity);
 
         /// <summary>
         /// Delegate for handling events.
@@ -61,6 +68,39 @@ namespace GenEvent
         public static GenEventAsyncDelegate<TGenEvent, TSubscriber> GenEventAsync { get; private set; }
 
         public static IReadOnlyList<TSubscriber> Subscribers => SubscriberList;
+
+        /// <summary>
+        /// Takes a stable snapshot of current subscribers using a pooled list.
+        /// </summary>
+        public static List<TSubscriber> TakeSubscribersSnapshot()
+        {
+            List<TSubscriber> snapshot;
+            if (SnapshotPool.Count > 0)
+            {
+                var index = SnapshotPool.Count - 1;
+                snapshot = SnapshotPool[index];
+                SnapshotPool.RemoveAt(index);
+            }
+            else
+            {
+                snapshot = new List<TSubscriber>(SubscriberList.Count);
+            }
+
+            snapshot.AddRange(SubscriberList);
+            return snapshot;
+        }
+
+        /// <summary>
+        /// Clears and returns a subscriber snapshot buffer to the pool.
+        /// </summary>
+        public static void ReturnSubscribersSnapshot(List<TSubscriber> snapshot)
+        {
+            snapshot.Clear();
+            if (SnapshotPool.Count < SnapshotPoolCapacity)
+            {
+                SnapshotPool.Add(snapshot);
+            }
+        }
 
         /// <summary>
         /// Initializes the event registry with a sync delegate.

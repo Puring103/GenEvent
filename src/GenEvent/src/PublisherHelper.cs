@@ -179,12 +179,11 @@ namespace GenEvent
         /// <param name="gameEvent">The event to publish.</param>
         /// <param name="config">The publish config for this Publish (filters, Cancelable).</param>
         /// <returns>True if all subscribers successfully handled the event; false if any subscriber cancelled propagation (event stopped before reaching all subscribers)</returns>
-        public static bool Invoke<TSubscriber, TGenEvent>(this TGenEvent gameEvent, PublishConfig<TGenEvent> config)
+        public static bool Invoke<TSubscriber, TGenEvent>(this TGenEvent gameEvent, PublishConfig<TGenEvent> config, IReadOnlyList<TSubscriber> subscribers)
             where TGenEvent : struct, IGenEvent<TGenEvent>
             where TSubscriber : class
         {
             var completed = true;
-            var subscribers = GenEventRegistry<TGenEvent, TSubscriber>.Subscribers;
             var genEvent = GenEventRegistry<TGenEvent, TSubscriber>.GenEvent;
 
             for (int i = 0; i < subscribers.Count; i++)
@@ -212,12 +211,11 @@ namespace GenEvent
         /// <param name="gameEvent">The event to publish.</param>
         /// <param name="config">The publish config for this Publish (filters, Cancelable).</param>
         /// <returns>Task that completes with true if propagation should continue; false if cancelled.</returns>
-        public static async Task<bool> InvokeAsync<TSubscriber, TGenEvent>(this TGenEvent gameEvent, PublishConfig<TGenEvent> config)
+        public static async Task<bool> InvokeAsync<TSubscriber, TGenEvent>(this TGenEvent gameEvent, PublishConfig<TGenEvent> config, IReadOnlyList<TSubscriber> subscribers)
             where TGenEvent : struct, IGenEvent<TGenEvent>
             where TSubscriber : class
         {
             var completed = true;
-            var subscribers = GenEventRegistry<TGenEvent, TSubscriber>.Subscribers;
             var genEventAsync = GenEventRegistry<TGenEvent, TSubscriber>.GenEventAsync;
             var genEvent = GenEventRegistry<TGenEvent, TSubscriber>.GenEvent;
 

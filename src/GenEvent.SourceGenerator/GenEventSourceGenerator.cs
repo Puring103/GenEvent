@@ -119,14 +119,55 @@ namespace GenEvent.SourceGenerator
         private static List<EventInfo> CollectEvents(Compilation compilation, INamedTypeSymbol iGenEventSymbol)
         {
             var result = new List<EventInfo>();
-            var iGenEventInterface = iGenEventSymbol.ConstructUnboundGenericType();
-            var visitor = new EventCollector(compilation, result);
-            foreach (var tree in compilation.SyntaxTrees)
+            var seen = new HashSet<INamedTypeSymbol>(SymbolEqualityComparer.Default);
+
+            CollectEventsFromNamespace(compilation.Assembly.GlobalNamespace, compilation, result, seen);
+
+            foreach (var referencedAssembly in compilation.SourceModule.ReferencedAssemblySymbols)
             {
-                var model = compilation.GetSemanticModel(tree);
-                visitor.Visit(tree.GetRoot(), model);
+                CollectEventsFromNamespace(referencedAssembly.GlobalNamespace, compilation, result, seen);
             }
+
             return result;
+        }
+
+        private static void CollectEventsFromNamespace(
+            INamespaceSymbol ns,
+            Compilation compilation,
+            List<EventInfo> result,
+            HashSet<INamedTypeSymbol> seen)
+        {
+            foreach (var type in ns.GetTypeMembers())
+            {
+                CollectEventsFromType(type, compilation, result, seen);
+            }
+
+            foreach (var childNamespace in ns.GetNamespaceMembers())
+            {
+                CollectEventsFromNamespace(childNamespace, compilation, result, seen);
+            }
+        }
+
+        private static void CollectEventsFromType(
+            INamedTypeSymbol type,
+            Compilation compilation,
+            List<EventInfo> result,
+            HashSet<INamedTypeSymbol> seen)
+        {
+            if (type.TypeKind == TypeKind.Struct && ImplementsIGenEvent(type, compilation) && seen.Add(type))
+            {
+                result.Add(new EventInfo
+                {
+                    EventType = type,
+                    Name = type.Name,
+                    FullName = type.ToDisplayString()
+                });
+            }
+
+            foreach (var nestedType in type.GetTypeMembers())
+            {
+                CollectEventsFromType(nestedType, compilation, result, seen);
+            }
         }
 
         private static (List<SubscriberInfo> subscribers, List<Diagnostic> diagnostics) CollectSubscribers(
@@ -363,6 +404,8 @@ namespace GenEvent.SourceGenerator
         private static string GenerateEventPublisher(EventInfo evt, IReadOnlyList<SubscriberInfo> subscriberList, string template)
         {
             var usings = CollectUsings(evt.EventType, subscriberList.Select(s => s.SubscriberType));
+            var syncSnapshotDeclarations = new StringBuilder();
+            var syncSnapshotReturns = new StringBuilder();
             var syncInvocations = new StringBuilder();
             var seenSyncTypes = new HashSet<INamedTypeSymbol>(SymbolEqualityComparer.Default);
             foreach (var sub in subscriberList)
@@ -370,18 +413,28 @@ namespace GenEvent.SourceGenerator
                 if (sub.IsAsync) continue;
                 if (seenSyncTypes.Add(sub.SubscriberType))
                 {
-                    syncInvocations.AppendLine($"        completed = @event.Invoke<{sub.SubscriberType.ToDisplayString()}, TGenEvent>(config);");
+                    var subscriberTypeName = sub.SubscriberType.ToDisplayString();
+                    var snapshotVariableName = GetSubscriberSnapshotVariableName(sub.SubscriberType);
+                    syncSnapshotDeclarations.AppendLine($"        var {snapshotVariableName} = GenEventRegistry<TGenEvent, {subscriberTypeName}>.TakeSubscribersSnapshot();");
+                    syncSnapshotReturns.AppendLine($"            GenEventRegistry<TGenEvent, {subscriberTypeName}>.ReturnSubscribersSnapshot({snapshotVariableName});");
+                    syncInvocations.AppendLine($"            completed = @event.Invoke<{subscriberTypeName}, TGenEvent>(config, {snapshotVariableName});");
                     syncInvocations.AppendLine("        if (!completed) return false;");
                     syncInvocations.AppendLine();
                 }
             }
 
+            var asyncSnapshotDeclarations = new StringBuilder();
+            var asyncSnapshotReturns = new StringBuilder();
             var asyncInvocations = new StringBuilder();
             var seenAsyncTypes = new HashSet<INamedTypeSymbol>(SymbolEqualityComparer.Default);
             foreach (var sub in subscriberList)
             {
                 if (!seenAsyncTypes.Add(sub.SubscriberType)) continue;
-                asyncInvocations.AppendLine($"        completed = await @event.InvokeAsync<{sub.SubscriberType.ToDisplayString()}, TGenEvent>(config);");
+                var subscriberTypeName = sub.SubscriberType.ToDisplayString();
+                var snapshotVariableName = GetSubscriberSnapshotVariableName(sub.SubscriberType);
+                asyncSnapshotDeclarations.AppendLine($"        var {snapshotVariableName} = GenEventRegistry<TGenEvent, {subscriberTypeName}>.TakeSubscribersSnapshot();");
+                asyncSnapshotReturns.AppendLine($"            GenEventRegistry<TGenEvent, {subscriberTypeName}>.ReturnSubscribersSnapshot({snapshotVariableName});");
+                asyncInvocations.AppendLine($"            completed = await @event.InvokeAsync<{subscriberTypeName}, TGenEvent>(config, {snapshotVariableName});");
                 asyncInvocations.AppendLine("        if (!completed) return false;");
                 asyncInvocations.AppendLine();
             }
@@ -390,8 +443,28 @@ namespace GenEvent.SourceGenerator
                 .Replace("{UsingNamespaces}", usings)
                 .Replace("{EventName}", evt.Name)
                 .Replace("{EventFullName}", evt.FullName)
+                .Replace("{SubscriberSnapshots}", syncSnapshotDeclarations.ToString().TrimEnd())
                 .Replace("{SubscriberInvocations}", syncInvocations.ToString().TrimEnd())
-                .Replace("{SubscriberInvocationsAsync}", asyncInvocations.ToString().TrimEnd());
+                .Replace("{SubscriberSnapshotReturns}", syncSnapshotReturns.ToString().TrimEnd())
+                .Replace("{SubscriberSnapshotsAsync}", asyncSnapshotDeclarations.ToString().TrimEnd())
+                .Replace("{SubscriberInvocationsAsync}", asyncInvocations.ToString().TrimEnd())
+                .Replace("{SubscriberSnapshotReturnsAsync}", asyncSnapshotReturns.ToString().TrimEnd());
+        }
+
+        private static string GetSubscriberSnapshotVariableName(INamedTypeSymbol subscriberType)
+        {
+            return "__genEventSnapshot_" + SanitizeIdentifier(subscriberType.ToDisplayString());
+        }
+
+        private static string SanitizeIdentifier(string value)
+        {
+            var builder = new StringBuilder(value.Length);
+            foreach (var ch in value)
+            {
+                builder.Append(char.IsLetterOrDigit(ch) ? ch : '_');
+            }
+
+            return builder.ToString();
         }
 
         private static string GenerateSubscriberRegistry(SubscriberInfo sub,
@@ -486,47 +559,6 @@ namespace GenEvent.SourceGenerator
             public INamedTypeSymbol EventType { get; set; }
             public SubscriberPriority Priority { get; set; }
             public bool IsAsync { get; set; }
-        }
-
-        private class EventCollector : CSharpSyntaxWalker
-        {
-            private readonly Compilation _compilation;
-            private readonly List<EventInfo> _result;
-            private SemanticModel _model = null!;
-
-            public EventCollector(Compilation compilation, List<EventInfo> result)
-            {
-                _compilation = compilation;
-                _result = result;
-            }
-
-            public void Visit(SyntaxNode node, SemanticModel model)
-            {
-                _model = model;
-                Visit(node);
-            }
-
-            public override void VisitStructDeclaration(StructDeclarationSyntax node)
-            {
-                var symbol = _model.GetDeclaredSymbol(node, default);
-                if (symbol is INamedTypeSymbol named && ImplementsIGenEvent(named, _compilation))
-                {
-                    _result.Add(new EventInfo
-                    {
-                        EventType = named,
-                        Name = named.Name,
-                        FullName = named.ToDisplayString()
-                    });
-                }
-                base.VisitStructDeclaration(node);
-            }
-
-            private static bool ImplementsIGenEvent(INamedTypeSymbol type, Compilation compilation)
-            {
-                var iGenEvent = compilation.GetTypeByMetadataName(GenEventMetadataName);
-                if (iGenEvent == null) return false;
-                return type.AllInterfaces.Any(i => SymbolEqualityComparer.Default.Equals(i.OriginalDefinition, iGenEvent));
-            }
         }
     }
 }

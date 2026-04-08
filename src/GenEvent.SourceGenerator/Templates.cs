@@ -33,18 +33,34 @@ public class {EventName}Publisher : BaseEventPublisher
     {
         bool completed = true;
 
+{SubscriberSnapshots}
+        try
+        {
 {SubscriberInvocations}
 
-        return completed;
+            return completed;
+        }
+        finally
+        {
+{SubscriberSnapshotReturns}
+        }
     }
 
     public override async Task<bool> PublishAsync<TGenEvent>(TGenEvent @event, PublishConfig<TGenEvent> config)
     {
         bool completed = true;
 
+{SubscriberSnapshotsAsync}
+        try
+        {
 {SubscriberInvocationsAsync}
 
-        return completed;
+            return completed;
+        }
+        finally
+        {
+{SubscriberSnapshotReturnsAsync}
+        }
     }
 }
 }

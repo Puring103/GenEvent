@@ -410,12 +410,16 @@ public class AsyncTaskNoBoolSubscriber
 public class SelfUnregisteringSubscriber
 {
     public int ReceiveCount;
+    public bool RemoveSelfOnHandle { get; set; } = true;
 
     [OnEvent]
     public bool OnTestEventA(TestEventA e)
     {
         ReceiveCount++;
-        this.StopListening();
+        if (RemoveSelfOnHandle)
+        {
+            this.StopListening();
+        }
         return true;
     }
 }
@@ -426,7 +430,7 @@ public class SelfUnregisteringSubscriber
 public class AddSubscriberDuringHandleSubscriber
 {
     public int ReceiveCount;
-    public SubscriberA Other;
+    public SubscriberA? Other { get; set; }
 
     [OnEvent]
     public bool OnTestEventA(TestEventA e)
@@ -435,6 +439,27 @@ public class AddSubscriberDuringHandleSubscriber
         if (ReceiveCount == 1 && Other != null)
         {
             Other.StartListening();
+        }
+        return true;
+    }
+}
+
+/// <summary>
+/// Subscriber that unregisters another subscriber during handling.
+/// </summary>
+public class RemovingOtherSubscriber
+{
+    public int ReceiveCount;
+    public RemovingOtherSubscriber? Target { get; set; }
+    public bool RemoveTargetOnHandle { get; set; } = true;
+
+    [OnEvent]
+    public bool OnTestEventA(TestEventA e)
+    {
+        ReceiveCount++;
+        if (RemoveTargetOnHandle)
+        {
+            Target?.StopListening();
         }
         return true;
     }
