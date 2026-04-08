@@ -42,6 +42,12 @@ public class SourceGeneratorTests
     }
 
     [Test]
+    public void GenEventBootstrap_IsPublic()
+    {
+        Assert.That(typeof(GenEventBootstrap).IsPublic, Is.True);
+    }
+
+    [Test]
     public void GeneratedSubscriberRegistry_StartListening_ReceivesEvents()
     {
         var subscriber = new SubscriberA();

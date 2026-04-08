@@ -9,7 +9,7 @@ using GenEvent.Interface;
 namespace GenEvent
 {
 [GeneratedCode(""GenEvent"",""V0.5"")]
-internal static class GenEventBootstrap
+public static class GenEventBootstrap
 {
 {InitAttribute}
     public static void Init()
