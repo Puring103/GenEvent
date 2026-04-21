@@ -54,7 +54,7 @@ public class RobustnessTests
     }
 
     [Test]
-    public void DiscardPendingSetting_ClearsStagedFluentConfig()
+    public void StagedFluentConfig_WithoutPublish_DoesNotAffectNextPublish()
     {
         GenEventBootstrap.Init();
         var subscriberA = new SubscriberA();
@@ -65,9 +65,36 @@ public class RobustnessTests
         try
         {
             new TestEventA { Value = 1 }.OnlySubscriber(subscriberA);
-            PublishConfig<TestEventA>.DiscardPendingSetting();
 
             new TestEventA { Value = 2 }.Publish();
+
+            Assert.Multiple(() =>
+            {
+                Assert.That(subscriberA.ReceiveCount, Is.EqualTo(1));
+                Assert.That(subscriberB.ReceiveCount, Is.EqualTo(1));
+            });
+        }
+        finally
+        {
+            subscriberA.StopListening();
+            subscriberB.StopListening();
+        }
+    }
+
+    [Test]
+    public async Task StagedFluentConfig_WithoutPublish_DoesNotAffectNextPublishAsync()
+    {
+        GenEventBootstrap.Init();
+        var subscriberA = new SyncOnlySubscriberForAsyncEvent();
+        var subscriberB = new AsyncOnlySubscriber();
+        subscriberA.StartListening();
+        subscriberB.StartListening();
+
+        try
+        {
+            new TestEventAsync { Value = 1 }.OnlySubscriber(subscriberA);
+
+            await new TestEventAsync { Value = 2 }.PublishAsync();
 
             Assert.Multiple(() =>
             {

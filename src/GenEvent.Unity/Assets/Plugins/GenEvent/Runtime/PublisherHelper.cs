@@ -12,7 +12,7 @@ namespace GenEvent
     public static class PublisherHelper
     {
         /// <summary>
-        /// Publishes an event using the current fluent config. Takes that config for this publish and replaces the static Setting with a new one from the pool; when publish ends, the used config is cleared and returned to the pool.
+        /// Publishes an event using the default empty publish config.
         /// </summary>
         /// <typeparam name="TGenEvent">The event type.</typeparam>
         /// <param name="gameEvent">The event to publish.</param>
@@ -20,23 +20,11 @@ namespace GenEvent
         public static bool Publish<TGenEvent>(this TGenEvent gameEvent)
             where TGenEvent : struct, IGenEvent<TGenEvent>
         {
-            var config = PublishConfig<TGenEvent>.TakeForPublish();
-            try
-            {
-                if (!BaseEventPublisher.Publishers.TryGetValue(typeof(TGenEvent), out var publisher))
-                    throw GenEventRuntimeGuard.CreateMissingPublisherException(typeof(TGenEvent), nameof(Publish));
-
-                return publisher.Publish(gameEvent, config);
-            }
-            finally
-            {
-                PublishConfig<TGenEvent>.ReturnUsedConfig(config);
-            }
+            return PublishCore(gameEvent, new PublishConfig<TGenEvent>(), nameof(Publish));
         }
 
         /// <summary>
-        /// Publishes an event asynchronously using the current fluent config.
-        /// Same config lifecycle as Publish; use await and ensure ReturnUsedConfig in finally.
+        /// Publishes an event asynchronously using the default empty publish config.
         /// </summary>
         /// <typeparam name="TGenEvent">The event type.</typeparam>
         /// <param name="gameEvent">The event to publish.</param>
@@ -44,49 +32,98 @@ namespace GenEvent
         public static async Task<bool> PublishAsync<TGenEvent>(this TGenEvent gameEvent)
             where TGenEvent : struct, IGenEvent<TGenEvent>
         {
-            var config = PublishConfig<TGenEvent>.TakeForPublish();
+            return await PublishAsyncCore(gameEvent, new PublishConfig<TGenEvent>(), nameof(PublishAsync));
+        }
+
+        /// <summary>
+        /// Publishes an already configured event.
+        /// The config is consumed for this publish and then cleared.
+        /// </summary>
+        public static bool Publish<TGenEvent>(this ConfiguredEvent<TGenEvent> configuredEvent)
+            where TGenEvent : struct, IGenEvent<TGenEvent>
+        {
             try
             {
-                if (!BaseEventPublisher.Publishers.TryGetValue(typeof(TGenEvent), out var publisher))
-                    throw GenEventRuntimeGuard.CreateMissingPublisherException(typeof(TGenEvent), nameof(PublishAsync));
-
-                return await publisher.PublishAsync(gameEvent, config);
+                return PublishCore(configuredEvent.Event, configuredEvent.Config, nameof(Publish));
             }
             finally
             {
-                PublishConfig<TGenEvent>.ReturnUsedConfig(config);
+                configuredEvent.Config.Reset();
             }
         }
 
         /// <summary>
-        /// Sets the publish config as cancelable.
+        /// Publishes an already configured event asynchronously.
+        /// The config is consumed for this publish and then cleared.
         /// </summary>
-        /// <typeparam name="TGenEvent">The event type.</typeparam>
-        /// <param name="gameEvent">The event to publish.</param>
-        /// <returns>The event.</returns>
-        public static TGenEvent Cancelable<TGenEvent>(this TGenEvent gameEvent)
+        public static async Task<bool> PublishAsync<TGenEvent>(this ConfiguredEvent<TGenEvent> configuredEvent)
             where TGenEvent : struct, IGenEvent<TGenEvent>
         {
-            PublishConfig<TGenEvent>.Setting.SetCancelable();
-            return gameEvent;
+            try
+            {
+                return await PublishAsyncCore(configuredEvent.Event, configuredEvent.Config, nameof(PublishAsync));
+            }
+            finally
+            {
+                configuredEvent.Config.Reset();
+            }
         }
 
         /// <summary>
-        /// Adds a filter to the publish config.
+        /// Sets the publish config as cancelable for a new configured event.
+        /// </summary>
+        /// <typeparam name="TGenEvent">The event type.</typeparam>
+        /// <param name="gameEvent">The event to publish.</param>
+        /// <returns>The configured event.</returns>
+        public static ConfiguredEvent<TGenEvent> Cancelable<TGenEvent>(this TGenEvent gameEvent)
+            where TGenEvent : struct, IGenEvent<TGenEvent>
+        {
+            var config = new PublishConfig<TGenEvent>();
+            config.SetCancelable();
+            return new ConfiguredEvent<TGenEvent>(gameEvent, config);
+        }
+
+        /// <summary>
+        /// Sets the publish config as cancelable for an already configured event.
+        /// </summary>
+        public static ConfiguredEvent<TGenEvent> Cancelable<TGenEvent>(this ConfiguredEvent<TGenEvent> configuredEvent)
+            where TGenEvent : struct, IGenEvent<TGenEvent>
+        {
+            configuredEvent.Config.SetCancelable();
+            return configuredEvent;
+        }
+
+        /// <summary>
+        /// Adds a filter to a new configured event.
         /// Filter returns true if the subscriber should be filtered out.
         /// </summary>
         /// <typeparam name="TGenEvent">The event type.</typeparam>
         /// <param name="gameEvent">The event to publish.</param>
         /// <param name="filter">The filter to add.</param>
-        /// <returns>The event.</returns>
-        public static TGenEvent WithFilter<TGenEvent>(this TGenEvent gameEvent, Predicate<object> filter)
+        /// <returns>The configured event.</returns>
+        public static ConfiguredEvent<TGenEvent> WithFilter<TGenEvent>(this TGenEvent gameEvent, Predicate<object> filter)
             where TGenEvent : struct, IGenEvent<TGenEvent>
         {
             if (filter == null)
                 throw new ArgumentNullException(nameof(filter));
 
-            PublishConfig<TGenEvent>.Setting.AddFilter(filter);
-            return gameEvent;
+            var config = new PublishConfig<TGenEvent>();
+            config.AddFilter(filter);
+            return new ConfiguredEvent<TGenEvent>(gameEvent, config);
+        }
+
+        /// <summary>
+        /// Adds a filter to an already configured event.
+        /// Filter returns true if the subscriber should be filtered out.
+        /// </summary>
+        public static ConfiguredEvent<TGenEvent> WithFilter<TGenEvent>(this ConfiguredEvent<TGenEvent> configuredEvent, Predicate<object> filter)
+            where TGenEvent : struct, IGenEvent<TGenEvent>
+        {
+            if (filter == null)
+                throw new ArgumentNullException(nameof(filter));
+
+            configuredEvent.Config.AddFilter(filter);
+            return configuredEvent;
         }
 
         /// <summary>
@@ -95,12 +132,20 @@ namespace GenEvent
         /// <typeparam name="TGenEvent">The event type.</typeparam>
         /// <param name="gameEvent">The event to publish.</param>
         /// <param name="subscriber">The subscriber to exclude.</param>
-        /// <returns>The event.</returns>
-        public static TGenEvent ExcludeSubscriber<TGenEvent>(this TGenEvent gameEvent, object subscriber)
+        /// <returns>The configured event.</returns>
+        public static ConfiguredEvent<TGenEvent> ExcludeSubscriber<TGenEvent>(this TGenEvent gameEvent, object subscriber)
             where TGenEvent : struct, IGenEvent<TGenEvent>
         {
-            PublishConfig<TGenEvent>.Setting.AddFilter(GenEventFilters.ExcludeSubscriber(subscriber));
-            return gameEvent;
+            return gameEvent.WithFilter(GenEventFilters.ExcludeSubscriber(subscriber));
+        }
+
+        /// <summary>
+        /// Excludes a subscriber from an already configured event.
+        /// </summary>
+        public static ConfiguredEvent<TGenEvent> ExcludeSubscriber<TGenEvent>(this ConfiguredEvent<TGenEvent> configuredEvent, object subscriber)
+            where TGenEvent : struct, IGenEvent<TGenEvent>
+        {
+            return configuredEvent.WithFilter(GenEventFilters.ExcludeSubscriber(subscriber));
         }
 
         /// <summary>
@@ -109,12 +154,20 @@ namespace GenEvent
         /// <typeparam name="TGenEvent">The event type.</typeparam>
         /// <param name="gameEvent">The event to publish.</param>
         /// <param name="subscribers">The list of subscribers to exclude.</param>
-        /// <returns>The event.</returns>
-        public static TGenEvent ExcludeSubscribers<TGenEvent>(this TGenEvent gameEvent, HashSet<object> subscribers)
+        /// <returns>The configured event.</returns>
+        public static ConfiguredEvent<TGenEvent> ExcludeSubscribers<TGenEvent>(this TGenEvent gameEvent, HashSet<object> subscribers)
             where TGenEvent : struct, IGenEvent<TGenEvent>
         {
-            PublishConfig<TGenEvent>.Setting.AddFilter(GenEventFilters.ExcludeSubscribers(subscribers));
-            return gameEvent;
+            return gameEvent.WithFilter(GenEventFilters.ExcludeSubscribers(subscribers));
+        }
+
+        /// <summary>
+        /// Excludes a list of subscribers from an already configured event.
+        /// </summary>
+        public static ConfiguredEvent<TGenEvent> ExcludeSubscribers<TGenEvent>(this ConfiguredEvent<TGenEvent> configuredEvent, HashSet<object> subscribers)
+            where TGenEvent : struct, IGenEvent<TGenEvent>
+        {
+            return configuredEvent.WithFilter(GenEventFilters.ExcludeSubscribers(subscribers));
         }
 
         /// <summary>
@@ -123,12 +176,20 @@ namespace GenEvent
         /// <typeparam name="TGenEvent">The event type.</typeparam>
         /// <param name="gameEvent">The event to publish.</param>
         /// <param name="subscriber">The subscriber to allow.</param>
-        /// <returns>The event.</returns>
-        public static TGenEvent OnlySubscriber<TGenEvent>(this TGenEvent gameEvent, object subscriber)
+        /// <returns>The configured event.</returns>
+        public static ConfiguredEvent<TGenEvent> OnlySubscriber<TGenEvent>(this TGenEvent gameEvent, object subscriber)
             where TGenEvent : struct, IGenEvent<TGenEvent>
         {
-            PublishConfig<TGenEvent>.Setting.AddFilter(GenEventFilters.OnlySubscriber(subscriber));
-            return gameEvent;
+            return gameEvent.WithFilter(GenEventFilters.OnlySubscriber(subscriber));
+        }
+
+        /// <summary>
+        /// Allows only a specific subscriber to pass through for an already configured event.
+        /// </summary>
+        public static ConfiguredEvent<TGenEvent> OnlySubscriber<TGenEvent>(this ConfiguredEvent<TGenEvent> configuredEvent, object subscriber)
+            where TGenEvent : struct, IGenEvent<TGenEvent>
+        {
+            return configuredEvent.WithFilter(GenEventFilters.OnlySubscriber(subscriber));
         }
 
         /// <summary>
@@ -137,12 +198,20 @@ namespace GenEvent
         /// <typeparam name="TGenEvent">The event type.</typeparam>
         /// <param name="gameEvent">The event to publish.</param>
         /// <param name="subscribers">The list of subscribers to allow.</param>
-        /// <returns>The event.</returns>
-        public static TGenEvent OnlySubscribers<TGenEvent>(this TGenEvent gameEvent, HashSet<object> subscribers)
+        /// <returns>The configured event.</returns>
+        public static ConfiguredEvent<TGenEvent> OnlySubscribers<TGenEvent>(this TGenEvent gameEvent, HashSet<object> subscribers)
             where TGenEvent : struct, IGenEvent<TGenEvent>
         {
-            PublishConfig<TGenEvent>.Setting.AddFilter(GenEventFilters.OnlySubscribers(subscribers));
-            return gameEvent;
+            return gameEvent.WithFilter(GenEventFilters.OnlySubscribers(subscribers));
+        }
+
+        /// <summary>
+        /// Allows only a list of subscribers to pass through for an already configured event.
+        /// </summary>
+        public static ConfiguredEvent<TGenEvent> OnlySubscribers<TGenEvent>(this ConfiguredEvent<TGenEvent> configuredEvent, HashSet<object> subscribers)
+            where TGenEvent : struct, IGenEvent<TGenEvent>
+        {
+            return configuredEvent.WithFilter(GenEventFilters.OnlySubscribers(subscribers));
         }
 
         /// <summary>
@@ -151,13 +220,22 @@ namespace GenEvent
         /// <typeparam name="TGenEvent">The event type.</typeparam>
         /// <typeparam name="TSubscriber">The type of subscriber to allow.</typeparam>
         /// <param name="gameEvent">The event to publish.</param>
-        /// <returns>The event.</returns>
-        public static TGenEvent OnlyType<TGenEvent, TSubscriber>(this TGenEvent gameEvent)
+        /// <returns>The configured event.</returns>
+        public static ConfiguredEvent<TGenEvent> OnlyType<TGenEvent, TSubscriber>(this TGenEvent gameEvent)
             where TGenEvent : struct, IGenEvent<TGenEvent>
             where TSubscriber : class
         {
-            PublishConfig<TGenEvent>.Setting.AddFilter(GenEventFilters.OnlyType<TSubscriber>());
-            return gameEvent;
+            return gameEvent.WithFilter(GenEventFilters.OnlyType<TSubscriber>());
+        }
+
+        /// <summary>
+        /// Allows only subscribers of a specific type to pass through for an already configured event.
+        /// </summary>
+        public static ConfiguredEvent<TGenEvent> OnlyType<TGenEvent, TSubscriber>(this ConfiguredEvent<TGenEvent> configuredEvent)
+            where TGenEvent : struct, IGenEvent<TGenEvent>
+            where TSubscriber : class
+        {
+            return configuredEvent.WithFilter(GenEventFilters.OnlyType<TSubscriber>());
         }
 
         /// <summary>
@@ -166,13 +244,22 @@ namespace GenEvent
         /// <typeparam name="TGenEvent">The event type.</typeparam>
         /// <typeparam name="TSubscriber">The type of subscriber to exclude.</typeparam>
         /// <param name="gameEvent">The event to publish.</param>
-        /// <returns>The event.</returns>
-        public static TGenEvent ExcludeType<TGenEvent, TSubscriber>(this TGenEvent gameEvent)
+        /// <returns>The configured event.</returns>
+        public static ConfiguredEvent<TGenEvent> ExcludeType<TGenEvent, TSubscriber>(this TGenEvent gameEvent)
             where TGenEvent : struct, IGenEvent<TGenEvent>
             where TSubscriber : class
         {
-            PublishConfig<TGenEvent>.Setting.AddFilter(GenEventFilters.ExcludeType<TSubscriber>());
-            return gameEvent;
+            return gameEvent.WithFilter(GenEventFilters.ExcludeType<TSubscriber>());
+        }
+
+        /// <summary>
+        /// Excludes subscribers of a specific type from an already configured event.
+        /// </summary>
+        public static ConfiguredEvent<TGenEvent> ExcludeType<TGenEvent, TSubscriber>(this ConfiguredEvent<TGenEvent> configuredEvent)
+            where TGenEvent : struct, IGenEvent<TGenEvent>
+            where TSubscriber : class
+        {
+            return configuredEvent.WithFilter(GenEventFilters.ExcludeType<TSubscriber>());
         }
 
         /// <summary>
@@ -182,6 +269,24 @@ namespace GenEvent
             where TGenEvent : struct, IGenEvent<TGenEvent>
         {
             return BaseEventPublisher.Publishers.ContainsKey(typeof(TGenEvent));
+        }
+
+        private static bool PublishCore<TGenEvent>(TGenEvent gameEvent, PublishConfig<TGenEvent> config, string operationName)
+            where TGenEvent : struct, IGenEvent<TGenEvent>
+        {
+            if (!BaseEventPublisher.Publishers.TryGetValue(typeof(TGenEvent), out var publisher))
+                throw GenEventRuntimeGuard.CreateMissingPublisherException(typeof(TGenEvent), operationName);
+
+            return publisher.Publish(gameEvent, config);
+        }
+
+        private static async Task<bool> PublishAsyncCore<TGenEvent>(TGenEvent gameEvent, PublishConfig<TGenEvent> config, string operationName)
+            where TGenEvent : struct, IGenEvent<TGenEvent>
+        {
+            if (!BaseEventPublisher.Publishers.TryGetValue(typeof(TGenEvent), out var publisher))
+                throw GenEventRuntimeGuard.CreateMissingPublisherException(typeof(TGenEvent), operationName);
+
+            return await publisher.PublishAsync(gameEvent, config);
         }
 
         /// <summary>

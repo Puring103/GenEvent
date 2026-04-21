@@ -326,7 +326,7 @@ The following APIs are **per‑publish** fluent options. They affect only the cu
 | `evt.OnlySubscribers(HashSet<object>)`     | Deliver only to the instances in the given set             |
 | `evt.ExcludeSubscribers(HashSet<object>)`  | Exclude all instances in the given set                     |
 
-If you stage fluent configuration but decide not to publish, call `PublishConfig<TEvent>.DiscardPendingSetting()` to clear the pending per-event config explicitly.
+Fluent configuration now returns a `ConfiguredEvent<TEvent>` value that carries the config for that publish path. Most chain-style code remains unchanged, but if you store the fluent result, use `var` or `ConfiguredEvent<TEvent>` instead of the raw event type.
 
 ```csharp
 // Notify only the UI layer and avoid game logic
@@ -348,6 +348,10 @@ new DamageEvent { Amount = 5 }
 // Exclude multiple instances
 var exclude = new HashSet<object> { enemyA, enemyB };
 new DamageEvent { Amount = 5 }.ExcludeSubscribers(exclude).Publish();
+
+// If you keep the fluent result, store the configured event rather than the raw event struct
+var configured = new DamageEvent { Amount = 5 }.ExcludeSubscriber(this);
+configured.Publish();
 ```
 
 ## Async Support

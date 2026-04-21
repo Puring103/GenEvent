@@ -324,7 +324,7 @@ new DamageEvent { Amount = 10 }.Publish();
 | `evt.OnlySubscribers(HashSet<object>)`     | 仅集合中的实例收到                              |
 | `evt.ExcludeSubscribers(HashSet<object>)`  | 排除集合中的实例                                |
 
-如果已经链式配置了发布选项，但最终不打算执行发布，可调用 `PublishConfig<TEvent>.DiscardPendingSetting()` 显式清除当前事件类型暂存的配置。
+链式配置现在会返回一个携带本次发布配置的 `ConfiguredEvent<TEvent>`。大多数链式写法无需修改；如果要把 fluent 结果存入变量，应使用 `var` 或 `ConfiguredEvent<TEvent>`，而不是原始事件类型。
 
 ```csharp
 // 仅通知 UI 层，不触发游戏逻辑
@@ -346,6 +346,10 @@ new DamageEvent { Amount = 5 }
 // 排除多个实例
 var exclude = new HashSet<object> { enemyA, enemyB };
 new DamageEvent { Amount = 5 }.ExcludeSubscribers(exclude).Publish();
+
+// 如果要保存链式配置后的结果，应保存已配置事件，而不是原始事件 struct
+var configured = new DamageEvent { Amount = 5 }.ExcludeSubscriber(this);
+configured.Publish();
 ```
 
 ## 异步支持
