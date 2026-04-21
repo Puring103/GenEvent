@@ -37,6 +37,9 @@ namespace GenEvent.Interface
             where TGenEvent : struct, IGenEvent<TGenEvent>
             where TSubscriber : class
         {
+            if (!BaseEventPublisher.Publishers.ContainsKey(typeof(TGenEvent)))
+                throw GenEventRuntimeGuard.CreateMissingPublisherException(typeof(TGenEvent), nameof(StartListening));
+
             GenEventRegistry<TGenEvent, TSubscriber>.Register(self);
         }
 
@@ -50,6 +53,9 @@ namespace GenEvent.Interface
             where TGenEvent : struct, IGenEvent<TGenEvent>
             where TSubscriber : class
         {
+            if (!BaseEventPublisher.Publishers.ContainsKey(typeof(TGenEvent)))
+                throw GenEventRuntimeGuard.CreateMissingPublisherException(typeof(TGenEvent), nameof(StopListening));
+
             GenEventRegistry<TGenEvent, TSubscriber>.UnRegister(self);
         }
     }

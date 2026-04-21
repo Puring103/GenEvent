@@ -12,8 +12,7 @@ public class CrossAssemblyTests
     [SetUp]
     public void SetUp()
     {
-        BaseEventPublisher.Publishers.Clear();
-        BaseSubscriberRegistry.Subscribers.Clear();
+        TestRuntimeState.Reset();
         GenEventBootstrap.Init();
     }
 

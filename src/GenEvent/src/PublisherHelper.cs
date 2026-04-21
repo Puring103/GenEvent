@@ -23,7 +23,9 @@ namespace GenEvent
             var config = PublishConfig<TGenEvent>.TakeForPublish();
             try
             {
-                var publisher = BaseEventPublisher.Publishers[typeof(TGenEvent)];
+                if (!BaseEventPublisher.Publishers.TryGetValue(typeof(TGenEvent), out var publisher))
+                    throw GenEventRuntimeGuard.CreateMissingPublisherException(typeof(TGenEvent), nameof(Publish));
+
                 return publisher.Publish(gameEvent, config);
             }
             finally
@@ -45,7 +47,9 @@ namespace GenEvent
             var config = PublishConfig<TGenEvent>.TakeForPublish();
             try
             {
-                var publisher = BaseEventPublisher.Publishers[typeof(TGenEvent)];
+                if (!BaseEventPublisher.Publishers.TryGetValue(typeof(TGenEvent), out var publisher))
+                    throw GenEventRuntimeGuard.CreateMissingPublisherException(typeof(TGenEvent), nameof(PublishAsync));
+
                 return await publisher.PublishAsync(gameEvent, config);
             }
             finally
@@ -169,6 +173,15 @@ namespace GenEvent
         {
             PublishConfig<TGenEvent>.Setting.AddFilter(GenEventFilters.ExcludeType<TSubscriber>());
             return gameEvent;
+        }
+
+        /// <summary>
+        /// Returns true when a generated publisher exists for the event type.
+        /// </summary>
+        public static bool HasPublisher<TGenEvent>()
+            where TGenEvent : struct, IGenEvent<TGenEvent>
+        {
+            return BaseEventPublisher.Publishers.ContainsKey(typeof(TGenEvent));
         }
 
         /// <summary>

@@ -79,6 +79,14 @@ namespace GenEvent
         }
 
         /// <summary>
+        /// Clears any fluent configuration that was staged but never consumed by Publish/PublishAsync.
+        /// </summary>
+        public static void DiscardPendingSetting()
+        {
+            _setting?.Clear();
+        }
+
+        /// <summary>
         /// Clears the used config and returns it to the pool. Call when Publish ends so the config can be reused and does not leak previous filter/cancel state.
         /// </summary>
         /// <param name="config">The config that was used for the completed Publish.</param>

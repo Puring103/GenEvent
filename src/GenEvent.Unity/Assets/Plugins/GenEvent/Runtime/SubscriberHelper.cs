@@ -60,10 +60,10 @@ namespace GenEvent
         public static SubscriptionHandle StartListening<TSubscriber>(this TSubscriber subscriber)
             where TSubscriber : class
         {
-            if (BaseSubscriberRegistry.Subscribers.TryGetValue(subscriber.GetType(), out var iSubscriber))
-            {
-                iSubscriber.StartListening(subscriber);
-            }
+            if (!BaseSubscriberRegistry.Subscribers.TryGetValue(subscriber.GetType(), out var iSubscriber))
+                throw GenEventRuntimeGuard.CreateMissingSubscriberRegistryException(subscriber.GetType(), nameof(StartListening));
+
+            iSubscriber.StartListening(subscriber);
             return new SubscriptionHandle(() => subscriber.StopListening());
         }
 
@@ -75,10 +75,10 @@ namespace GenEvent
         public static void StopListening<TSubscriber>(this TSubscriber subscriber)
             where TSubscriber : class
         {
-            if (BaseSubscriberRegistry.Subscribers.TryGetValue(subscriber.GetType(), out var iSubscriber))
-            {
-                iSubscriber.StopListening(subscriber);
-            }
+            if (!BaseSubscriberRegistry.Subscribers.TryGetValue(subscriber.GetType(), out var iSubscriber))
+                throw GenEventRuntimeGuard.CreateMissingSubscriberRegistryException(subscriber.GetType(), nameof(StopListening));
+
+            iSubscriber.StopListening(subscriber);
         }
 
         /// <summary>
@@ -114,6 +114,16 @@ namespace GenEvent
             where TSubscriber : class
         {
             BaseSubscriberRegistry.StopListening<TSubscriber, TGenEvent>(subscriber);
+        }
+
+        /// <summary>
+        /// Returns the current subscriber count for a specific event/subscriber pair.
+        /// </summary>
+        public static int GetSubscriberCount<TGenEvent, TSubscriber>()
+            where TGenEvent : struct, IGenEvent<TGenEvent>
+            where TSubscriber : class
+        {
+            return GenEventRegistry<TGenEvent, TSubscriber>.SubscriberCount;
         }
     }
 }

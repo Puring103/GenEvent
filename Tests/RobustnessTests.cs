@@ -11,11 +11,11 @@ namespace Tests;
 public class RobustnessTests
 {
     [Test]
-    public void Publish_WithoutInit_ThrowsKeyNotFoundException()
+    public void Publish_WithoutInit_ThrowsInvalidOperationException()
     {
-        ClearBootstrapState();
+        TestRuntimeState.Reset();
         var evt = new TestEventA { Value = 1 };
-        Assert.Throws<KeyNotFoundException>(() => evt.Publish());
+        Assert.Throws<InvalidOperationException>(() => evt.Publish());
     }
 
     [Test]
@@ -51,6 +51,35 @@ public class RobustnessTests
     {
         var evt = new TestEventA { Value = 1 };
         Assert.Throws<ArgumentNullException>(() => evt.OnlySubscribers(null!));
+    }
+
+    [Test]
+    public void DiscardPendingSetting_ClearsStagedFluentConfig()
+    {
+        GenEventBootstrap.Init();
+        var subscriberA = new SubscriberA();
+        var subscriberB = new SubscriberB();
+        subscriberA.StartListening();
+        subscriberB.StartListening();
+
+        try
+        {
+            new TestEventA { Value = 1 }.OnlySubscriber(subscriberA);
+            PublishConfig<TestEventA>.DiscardPendingSetting();
+
+            new TestEventA { Value = 2 }.Publish();
+
+            Assert.Multiple(() =>
+            {
+                Assert.That(subscriberA.ReceiveCount, Is.EqualTo(1));
+                Assert.That(subscriberB.ReceiveCount, Is.EqualTo(1));
+            });
+        }
+        finally
+        {
+            subscriberA.StopListening();
+            subscriberB.StopListening();
+        }
     }
 
     [Test]
@@ -135,11 +164,11 @@ public class RobustnessTests
     }
 
     [Test]
-    public async Task PublishAsync_WithoutInit_ThrowsKeyNotFoundException()
+    public async Task PublishAsync_WithoutInit_ThrowsInvalidOperationException()
     {
-        ClearBootstrapState();
+        TestRuntimeState.Reset();
         var evt = new TestEventA { Value = 1 };
-        Assert.ThrowsAsync<KeyNotFoundException>(async () => await evt.PublishAsync());
+        Assert.ThrowsAsync<InvalidOperationException>(async () => await evt.PublishAsync());
     }
 
     [Test]
@@ -222,9 +251,4 @@ public class RobustnessTests
         trailing.StopListening();
     }
 
-    private static void ClearBootstrapState()
-    {
-        BaseEventPublisher.Publishers.Clear();
-        BaseSubscriberRegistry.Subscribers.Clear();
-    }
 }

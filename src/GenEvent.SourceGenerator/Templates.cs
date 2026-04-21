@@ -11,11 +11,17 @@ namespace GenEvent
 [GeneratedCode(""GenEvent"",""V0.5"")]
 public static class GenEventBootstrap
 {
+    public static bool IsInitialized { get; private set; }
+
 {InitAttribute}
     public static void Init()
     {
+        if (IsInitialized)
+            return;
+
 {PublisherRegistrations}
 {SubscriberRegistrations}
+        IsInitialized = true;
     }
 }
 }

@@ -69,6 +69,8 @@ namespace GenEvent
 
         public static IReadOnlyList<TSubscriber> Subscribers => SubscriberList;
 
+        public static int SubscriberCount => SubscriberList.Count;
+
         /// <summary>
         /// Takes a stable snapshot of current subscribers using a pooled list.
         /// </summary>

@@ -15,6 +15,7 @@ GenEvent is a high‑performance, zero‑GC event library. It uses a source gene
   - [Installation](#installation)
   - [Unity Projects](#unity-projects)
   - [Minimal Example](#minimal-example)
+- [Runtime Contract](#runtime-contract)
 - [Core APIs](#core-apis)
   - [Defining Events](#defining-events)
   - [Defining Subscribers and Handlers](#defining-subscribers-and-handlers)
@@ -87,7 +88,7 @@ public class GameManager
     }
 }
 
-// 3. Initialize (for non‑Unity projects call this once before the first Publish)
+// 3. Initialize (for non‑Unity projects call this once before the first subscribe or publish)
 GenEventBootstrap.Init();
 
 // 4. Subscribe; StartListening returns SubscriptionHandle (IDisposable)
@@ -99,6 +100,42 @@ new PlayerDeathEvent { PlayerId = 1 }.Publish();
 ```
 
 ---
+
+# Runtime Contract
+
+## Initialization Rules
+
+- In non-Unity projects, call `GenEventBootstrap.Init()` **before the first subscribe or publish**.
+- `Init()` is **idempotent** and can be called multiple times safely.
+- Use `GenEventBootstrap.IsInitialized` to check whether the current assembly has completed bootstrap.
+
+```csharp
+if (!GenEventBootstrap.IsInitialized)
+{
+    GenEventBootstrap.Init();
+}
+```
+
+If `Publish()`, `PublishAsync()`, `StartListening()`, or `StopListening()` is called before initialization, GenEvent throws a clear `InvalidOperationException` telling you to call `GenEventBootstrap.Init()` first.
+
+## Thread Model
+
+- The current release does **not** guarantee concurrent thread safety.
+- Nested publish from inside handlers is supported.
+- Concurrent publish, subscribe, unsubscribe, or concurrent mutation of fluent publish configuration is not supported.
+- If your host may touch GenEvent from multiple threads, serialize access in the host application.
+
+## Diagnostics
+
+Use these APIs for quick runtime checks:
+
+```csharp
+bool hasPublisher = PublisherHelper.HasPublisher<DamageEvent>();
+int count = SubscriberHelper.GetSubscriberCount<DamageEvent, HUDDisplay>();
+```
+
+- `HasPublisher<TEvent>()`: confirms whether the generated publisher is registered.
+- `GetSubscriberCount<TEvent, TSubscriber>()`: reports how many subscriber instances are currently registered for that event/subscriber pair.
 
 # Core APIs
 
@@ -156,14 +193,18 @@ A single class can define at most **one sync** and **one async** handler for the
 
 ## Initialization
 
-Before the first publish, call `GenEventBootstrap.Init()` to register all publishers and subscribers. If your solution has multiple assemblies, each one that uses GenEvent must call its own generated `Init()`.
+Before the first subscribe or publish, call `GenEventBootstrap.Init()` to register all publishers and subscribers. If your solution has multiple assemblies, each one that uses GenEvent must call its own generated `Init()`.
 
 ```csharp
-// Call once at application startup
+// Call once at application startup; repeated calls are safe
 GenEventBootstrap.Init();
 ```
 
 For Unity projects, the generator injects `[RuntimeInitializeOnLoadMethod]` automatically, so you usually do not need to call this manually.
+
+```csharp
+bool ready = GenEventBootstrap.IsInitialized;
+```
 
 ## Subscription Lifetime
 
@@ -284,6 +325,8 @@ The following APIs are **per‑publish** fluent options. They affect only the cu
 | `evt.ExcludeSubscriber(subscriber)`        | Exclude the specified instance                             |
 | `evt.OnlySubscribers(HashSet<object>)`     | Deliver only to the instances in the given set             |
 | `evt.ExcludeSubscribers(HashSet<object>)`  | Exclude all instances in the given set                     |
+
+If you stage fluent configuration but decide not to publish, call `PublishConfig<TEvent>.DiscardPendingSetting()` to clear the pending per-event config explicitly.
 
 ```csharp
 // Notify only the UI layer and avoid game logic

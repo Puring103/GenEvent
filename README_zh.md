@@ -13,6 +13,7 @@ GenEvent 是一个高性能、0 GC 的事件库，通过源码生成器在编译
   - [安装](#安装)
   - [Unity 项目](#unity-项目)
   - [最小示例](#最小示例)
+- [运行时契约](#运行时契约)
 - [核心 API](#核心-api)
   - [定义事件](#定义事件)
   - [定义订阅者与处理器](#定义订阅者与处理器)
@@ -85,7 +86,7 @@ public class GameManager
     }
 }
 
-// 3. 初始化（非 Unity 项目需在首次 Publish 前调用一次）
+// 3. 初始化（非 Unity 项目需在首次订阅或发布前调用一次）
 GenEventBootstrap.Init();
 
 // 4. 订阅，StartListening 返回 SubscriptionHandle（IDisposable）
@@ -97,6 +98,42 @@ new PlayerDeathEvent { PlayerId = 1 }.Publish();
 ```
 
 ---
+
+# 运行时契约
+
+## 初始化规则
+
+- 非 Unity 项目中，必须在**首次订阅或发布前**调用 `GenEventBootstrap.Init()`。
+- `Init()` 是**幂等**的，可以安全地重复调用。
+- 可通过 `GenEventBootstrap.IsInitialized` 检查当前程序集的 GenEvent 是否已初始化。
+
+```csharp
+if (!GenEventBootstrap.IsInitialized)
+{
+    GenEventBootstrap.Init();
+}
+```
+
+如果在初始化前调用 `Publish()`、`PublishAsync()`、`StartListening()` 或 `StopListening()`，GenEvent 会抛出清晰的 `InvalidOperationException`，并提示先调用 `GenEventBootstrap.Init()`。
+
+## 线程模型
+
+- 当前版本**不保证并发线程安全**。
+- 支持在处理器内部进行嵌套发布。
+- 不支持多线程并发发布、并发订阅、并发反订阅，以及多线程同时修改链式发布配置。
+- 如果宿主环境可能从多个线程访问 GenEvent，需要由宿主自行保证串行化。
+
+## 诊断辅助
+
+可使用以下 API 做快速排查：
+
+```csharp
+bool hasPublisher = PublisherHelper.HasPublisher<DamageEvent>();
+int count = SubscriberHelper.GetSubscriberCount<DamageEvent, HUDDisplay>();
+```
+
+- `HasPublisher<TEvent>()`：确认目标事件发布器是否已注册。
+- `GetSubscriberCount<TEvent, TSubscriber>()`：确认某个事件/订阅者组合当前注册了多少实例。
 
 # 核心 API
 
@@ -154,14 +191,18 @@ public class ShieldSystem
 
 ## 初始化
 
-首次发布前，调用 `GenEventBootstrap.Init()` 完成所有 Publisher 与 Subscriber 的注册。若项目有多个程序集，每个程序集需各自调用其生成的 `Init()`。
+首次订阅或发布前，调用 `GenEventBootstrap.Init()` 完成所有 Publisher 与 Subscriber 的注册。若项目有多个程序集，每个程序集需各自调用其生成的 `Init()`。
 
 ```csharp
-// 在程序入口调用一次即可
+// 在程序入口调用一次即可；重复调用安全
 GenEventBootstrap.Init();
 ```
 
 Unity 项目由生成器自动插入 `[RuntimeInitializeOnLoadMethod]`，无需手动调用。
+
+```csharp
+bool ready = GenEventBootstrap.IsInitialized;
+```
 
 ## 订阅生命周期
 
@@ -282,6 +323,8 @@ new DamageEvent { Amount = 10 }.Publish();
 | `evt.ExcludeSubscriber(subscriber)`        | 排除指定实例                                    |
 | `evt.OnlySubscribers(HashSet<object>)`     | 仅集合中的实例收到                              |
 | `evt.ExcludeSubscribers(HashSet<object>)`  | 排除集合中的实例                                |
+
+如果已经链式配置了发布选项，但最终不打算执行发布，可调用 `PublishConfig<TEvent>.DiscardPendingSetting()` 显式清除当前事件类型暂存的配置。
 
 ```csharp
 // 仅通知 UI 层，不触发游戏逻辑
