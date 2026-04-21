@@ -24,6 +24,7 @@ GenEvent 是一个高性能、0 GC 的事件库，通过源码生成器在编译
   - [取消传播](#取消传播)
   - [发布过滤](#发布过滤)
   - [异步支持](#异步支持)
+- [.NET 基准](#net-基准)
 - [源码生成器约束与诊断](#源码生成器约束与诊断)
 - [License](#license)
 
@@ -390,6 +391,24 @@ public class CombatLogger
 ```
 
 ---
+
+# .NET 基准
+
+仓库内提供了独立的 BenchmarkDotNet 项目 `Benchmarks/GenEvent.Benchmarks/`，用于做可重复的 .NET 侧性能测量。
+
+运行完整 benchmark：
+
+```powershell
+dotnet run -c Release --project Benchmarks/GenEvent.Benchmarks/GenEvent.Benchmarks.csproj
+```
+
+只运行单条 benchmark 示例：
+
+```powershell
+dotnet run -c Release --project Benchmarks/GenEvent.Benchmarks/GenEvent.Benchmarks.csproj -- --filter *PublishBenchmarks.Publish_NoSubscribers*
+```
+
+benchmark 结果更适合用于同一台机器、同一套配置下的版本趋势对比；不同机器或不同电源配置下的绝对耗时不宜直接横向比较。
 
 # 源码生成器约束与诊断
 

@@ -26,6 +26,7 @@ GenEvent is a high‑performance, zero‑GC event library. It uses a source gene
   - [Canceling Propagation](#canceling-propagation)
   - [Publish Filters](#publish-filters)
   - [Async Support](#async-support)
+- [.NET Benchmarks](#net-benchmarks)
 - [Source Generator Constraints & Diagnostics](#source-generator-constraints--diagnostics)
 - [License](#license)
 
@@ -392,6 +393,24 @@ public class CombatLogger
 ```
 
 ---
+
+# .NET Benchmarks
+
+The repository includes a dedicated BenchmarkDotNet project at `Benchmarks/GenEvent.Benchmarks/` for repeatable .NET-side performance measurements.
+
+Run the full benchmark suite with:
+
+```powershell
+dotnet run -c Release --project Benchmarks/GenEvent.Benchmarks/GenEvent.Benchmarks.csproj
+```
+
+Run a single benchmark with:
+
+```powershell
+dotnet run -c Release --project Benchmarks/GenEvent.Benchmarks/GenEvent.Benchmarks.csproj -- --filter *PublishBenchmarks.Publish_NoSubscribers*
+```
+
+Use benchmark results mainly for same-machine trend comparisons between revisions. Absolute timings from different machines or power profiles are not directly comparable.
 
 # Source Generator Constraints & Diagnostics
 

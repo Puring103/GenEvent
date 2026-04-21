@@ -1,5 +1,6 @@
 <Solution>
   <Project Path="src/GenEvent.SourceGenerator/GenEvent.SourceGenerator.csproj" />
   <Project Path="src/GenEvent/GenEvent.csproj" />
+  <Project Path="Benchmarks/GenEvent.Benchmarks/GenEvent.Benchmarks.csproj" />
   <Project Path="Tests\Tests.csproj" Type="Classic C#" />
 </Solution>
