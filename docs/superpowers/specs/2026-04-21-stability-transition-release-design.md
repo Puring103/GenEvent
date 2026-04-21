@@ -1,307 +1,307 @@
-# GenEvent Stability Transition Release Design
+# GenEvent 稳定性过渡版本设计
 
-## Summary
+## 概述
 
-This spec defines the next pre-v1.0 release for GenEvent as a stability transition release rather than a feature release. The goal is to harden runtime contracts, reduce integration ambiguity, and improve failure diagnostics without expanding GenEvent into a broader event framework.
+本设计文档定义 GenEvent 下一次 `v1.0` 之前的发布目标：它不是一个功能扩展版本，而是一个稳定性过渡版本。重点是收紧运行时契约、降低接入歧义、改善失败诊断，而不是把 GenEvent 扩展成更大的事件框架。
 
-This release is intentionally not labeled `v1.0`. `v1.0` is reserved for a later milestone where runtime contracts, public API shape, diagnostics, documentation, and ecosystem readiness are collectively mature enough to be treated as stable.
+这一版明确不进入 `v1.0`。`v1.0` 应保留给后续里程碑：当运行时契约、公开 API 形态、诊断能力、文档质量和生态接入准备度都足够成熟时，再将其视为稳定版本。
 
-## Release Positioning
+## 发布定位
 
-### Version intent
+### 版本意图
 
-The release should be published as either:
+这一版建议发布为以下两种之一：
 
-- `v0.9.14` if changes stay mostly within behavior/documentation and avoid meaningful public API expansion.
-- `v0.10.0` if new public runtime APIs are added, such as `GenEventBootstrap.IsInitialized` and minimal diagnostic helpers.
+- `v0.9.14`：如果改动基本停留在行为修正和文档补充，尽量避免新增公开 API。
+- `v0.10.0`：如果新增了公开运行时能力，例如 `GenEventBootstrap.IsInitialized` 和最小诊断接口。
 
-The recommended target is `v0.10.0`, because explicit runtime contract APIs are more valuable than preserving a narrower patch-level surface.
+推荐目标是 `v0.10.0`，因为明确的运行时契约 API 比维持更窄的补丁版本表象更有价值。
 
-### Primary outcome
+### 主要结果
 
-After this release, consumers should be able to answer the following questions directly from the runtime contract and documentation:
+完成这一版后，使用者应该能直接从运行时契约和文档中回答以下问题：
 
-- Has GenEvent been initialized?
-- What happens if `Publish()` is called before initialization?
-- What thread-safety guarantees exist?
-- How can I quickly verify whether a publisher or subscriber registration exists?
+- GenEvent 当前是否已经初始化？
+- 如果在初始化前调用 `Publish()`，会发生什么？
+- 当前版本的线程安全保证到底是什么？
+- 我如何快速确认某个事件发布器或订阅关系是否真的存在？
 
-## Goals
+## 目标
 
-- Make initialization behavior explicit, idempotent, and diagnosable.
-- Replace implementation-leaking exceptions with user-facing runtime errors.
-- Define and document the threading contract for the current architecture.
-- Add minimal observability for registration and publish troubleshooting.
-- Lock the new semantics with tests before adding more advanced runtime features.
+- 让初始化行为变得显式、幂等、可诊断。
+- 用面向使用者的运行时错误替换暴露内部实现的异常。
+- 为当前架构定义并写清楚线程模型。
+- 增加最小可观测能力，降低注册与发布排查成本。
+- 先用测试锁住语义，再考虑更高级的运行时功能。
 
-## Non-Goals
+## 非目标
 
-- Full runtime thread safety.
-- Lock-based or concurrent-collection rewrite of registry infrastructure.
-- Sticky/replay events.
-- Weak-reference subscriptions.
-- Batch publish APIs.
-- Unity main-thread dispatch helpers.
-- One-shot subscription APIs such as `ListenOnce`.
-- Large public API redesign.
+- 完整线程安全。
+- 基于锁或并发容器的注册表重写。
+- 粘性事件 / 回放事件。
+- 弱引用订阅。
+- 批量发布。
+- Unity 主线程调度辅助。
+- `ListenOnce` 这类一次性订阅 API。
+- 大规模公开 API 重构。
 
-These items remain candidates for later releases and should not expand scope for this transition version.
+这些内容都可以留到后续版本评估，但不应扩大本次稳定性过渡版本的范围。
 
-## Current Problems
+## 当前问题
 
-### Initialization is implicit
+### 初始化仍然是隐式约定
 
-`Publish()` and `PublishAsync()` currently assume publisher registration already exists. If initialization has not happened, the code falls through to dictionary indexing and throws `KeyNotFoundException`. This reveals an internal storage detail rather than a meaningful library contract.
+当前 `Publish()` 和 `PublishAsync()` 默认假设发布器已经完成注册。如果初始化没有发生，代码会继续走到字典索引并抛出 `KeyNotFoundException`。这暴露的是内部存储结构，而不是一个清晰的库级契约。
 
-### Threading semantics are undocumented
+### 线程语义没有正式定义
 
-The runtime currently uses mutable static state in `PublishConfig<TGenEvent>` and mutable list/dictionary registries in `GenEventRegistry<TGenEvent, TSubscriber>`. Nested publish is supported, but concurrent publish/register/unregister behavior is not defined or protected.
+当前运行时在 `PublishConfig<TGenEvent>` 中使用可变静态状态，在 `GenEventRegistry<TGenEvent, TSubscriber>` 中使用可变的 `List` / `Dictionary` 注册表。嵌套发布已经支持，但并发发布、并发注册、并发反注册的行为既没有定义，也没有保护。
 
-### Troubleshooting is too opaque
+### 排查能力不够
 
-When an event is not delivered, consumers have no direct runtime API to check whether GenEvent has been initialized or whether relevant publisher/subscriber registrations exist.
+当事件没有被送达时，使用者没有直接的运行时 API 来确认 GenEvent 是否已初始化，也无法快速确认目标事件发布器或订阅关系是否存在。
 
-## Proposed Approach
+## 方案比较
 
-### Approach options considered
+### 方案 A：现在就做完整线程安全改造
 
-#### Option A: Full thread-safe rewrite now
+在发布配置、发布器查找和订阅注册表中全面引入锁或并发数据结构。
 
-Introduce locking or concurrent data structures throughout publish config, publisher lookup, and subscriber registries.
+优点：
 
-Pros:
+- 可以立即提供更强的并发保证。
 
-- Stronger concurrency guarantees immediately.
+缺点：
 
-Cons:
+- 实现面大。
+- 更容易引入性能回退。
+- 对一个以低开销派发为卖点的库来说，也更容易引入新的语义问题。
 
-- Large implementation surface.
-- Higher risk of performance regressions.
-- Higher risk of semantic bugs in a library whose main value proposition is low-overhead dispatch.
+### 方案 B：显式单线程契约 + 诊断增强
 
-#### Option B: Explicit single-thread contract plus diagnostics
+保留当前高性能架构，正式说明当前版本不保证并发线程安全，并围绕初始化和误用增加轻量运行时检查与诊断能力。
 
-Keep the current high-performance architecture, explicitly document it as not guaranteed thread-safe, and add lightweight runtime checks and diagnostics around initialization and misuse.
+优点：
 
-Pros:
+- 保持项目定位清晰。
+- 改动面小且聚焦。
+- 能优先解决最常见的接入问题。
 
-- Preserves project identity.
-- Small, focused change surface.
-- Solves the most common integration problems first.
+缺点：
 
-Cons:
+- 不能满足真正需要并发派发的使用场景。
 
-- Does not satisfy users who need true concurrent dispatch.
+### 方案 C：优先加容错 API
 
-#### Option C: Add fault-tolerant convenience APIs first
+先增加 `TryPublish()` 一类便捷 API，而把初始化和线程语义继续保持为隐式约定。
 
-Prioritize `TryPublish()`-style APIs and other wrappers while leaving initialization and threading semantics mostly implicit.
+优点：
 
-Pros:
+- 对调用方来说容易感知到新能力。
 
-- Quick consumer-facing additions.
+缺点：
 
-Cons:
+- 容易掩盖底层契约仍然不清楚的问题。
+- 核心语义模糊的问题没有被真正解决。
 
-- Risks papering over undefined runtime behavior.
-- Leaves core contract ambiguity unresolved.
+### 推荐方案
 
-### Recommended approach
+本次版本采用方案 B。
 
-Adopt Option B for this release.
+对 GenEvent 来说，当前阶段最重要的不是把能力做宽，而是先把已有模型做明确、做稳定、做可预期。先收紧契约，再扩展功能，风险更低，也更符合项目定位。
 
-GenEvent should first become explicit and predictable before it becomes broader. The release should harden the current model instead of prematurely widening its promise surface.
+## 设计内容
 
-## Design
+### 1. 初始化契约
 
-### 1. Initialization contract
+#### 必须满足的行为
 
-#### Required behavior
+- `GenEventBootstrap.Init()` 必须是幂等的。
+- 运行时代码必须能暴露初始化状态。
+- 如果初始化缺失或发布器注册缺失，发布操作必须抛出清晰、面向使用者的错误。
 
-- `GenEventBootstrap.Init()` must be idempotent.
-- Runtime code must expose whether initialization has completed.
-- Publish operations must fail with a clear GenEvent-specific error if initialization or publisher registration is missing.
+#### API 方向
 
-#### API direction
-
-Add:
+新增：
 
 - `GenEventBootstrap.IsInitialized : bool`
 
-Behavior:
+行为约定：
 
-- `Init()` may be called multiple times safely.
-- The first successful initialization sets `IsInitialized = true`.
-- Subsequent `Init()` calls are no-ops.
+- `Init()` 可以安全地被调用多次。
+- 第一次成功初始化后，`IsInitialized = true`。
+- 后续再次调用 `Init()` 时不重复注册，直接视为空操作。
 
-#### Publish failure behavior
+#### 发布失败行为
 
-When `Publish()` or `PublishAsync()` is called for an event type whose publisher has not been registered, the runtime should throw `InvalidOperationException` with a message that:
+当 `Publish()` 或 `PublishAsync()` 针对某个事件类型执行时，如果对应发布器尚未注册，运行时应抛出 `InvalidOperationException`。异常消息必须满足以下要求：
 
-- names the event type,
-- states that GenEvent is not initialized or the publisher is unavailable,
-- tells the user to call `GenEventBootstrap.Init()` for the relevant assembly before publishing.
+- 明确指出事件类型；
+- 说明当前 GenEvent 尚未初始化，或目标发布器不可用；
+- 明确提示调用方需要先为对应程序集执行 `GenEventBootstrap.Init()`。
 
-This is intentionally stricter and clearer than returning `false`. Publishing without initialization is treated as a configuration/programming error, not a business-level outcome.
+这里不应返回 `false`。未初始化发布属于配置错误或调用错误，不是业务层面的“可接受失败”。
 
-### 2. Threading contract
+### 2. 线程契约
 
-#### Contract statement
+#### 契约声明
 
-This release will formally define GenEvent as not guaranteeing concurrent thread safety for:
+这一版将正式定义：GenEvent 当前版本不保证以下 API 的并发线程安全：
 
 - `Publish()`
 - `PublishAsync()`
 - `StartListening()`
 - `StopListening()`
 
-Supported behavior:
+明确支持的行为：
 
-- Nested publish from within handlers remains supported.
-- Re-entrant use on the same thread remains supported within the existing publish flow model.
+- 在处理器内部进行嵌套发布；
+- 同一线程上的重入式使用，前提是仍然落在现有发布模型内。
 
-Unsupported/undefined behavior for this release:
+这一版不保证、也不定义的行为：
 
-- Concurrent publish on the same event system state from multiple threads.
-- Concurrent register/unregister while other threads publish.
-- Concurrent mutation of fluent publish configuration state.
+- 多线程并发发布；
+- 一个线程发布、另一个线程并发注册或反注册；
+- 多线程同时修改链式发布配置状态。
 
-#### Documentation requirements
+#### 文档要求
 
-Both English and Chinese README files must gain a dedicated runtime contract section explaining:
+`README.md` 和 `README_zh.md` 都必须新增独立的运行时契约章节，明确说明：
 
-- initialization expectations,
-- idempotent bootstrap behavior,
-- thread model,
-- what nested publish means,
-- what is not guaranteed.
+- 初始化前提；
+- `Init()` 的幂等行为；
+- 当前线程模型；
+- 嵌套发布的含义；
+- 当前版本明确不保证的内容。
 
-### 3. Debug-time thread misuse detection
+### 3. 调试期线程误用检查
 
-#### Intent
+#### 目标
 
-Provide early feedback for common misuse without redesigning the runtime around locking.
+在不引入完整同步机制的前提下，为常见误用提供尽早失败的反馈。
 
-#### Proposed behavior
+#### 设计方案
 
-Add a runtime switch:
+新增运行时开关：
 
 - `GenEventRuntimeSettings.EnableThreadAccessChecks : bool`
 
-Behavior:
+行为约定：
 
-- The owning thread is captured on the first successful `GenEventBootstrap.Init()` call.
-- When `EnableThreadAccessChecks` is `true`, calls to publish/subscribe/unsubscribe from any other thread throw `InvalidOperationException`.
-- The default value is `false` so the release path keeps minimal overhead.
+- 在第一次成功执行 `GenEventBootstrap.Init()` 时记录所属线程；
+- 当 `EnableThreadAccessChecks` 为 `true` 时，如果其他线程调用发布、订阅或反订阅接口，则抛出 `InvalidOperationException`；
+- 默认值为 `false`，尽量保持发布路径上的额外开销最小。
 
-#### Design constraints
+#### 约束
 
-- The default release-path overhead should remain minimal.
-- The check must remain optional for host environments that intentionally manage cross-thread access differently.
-- The exception should explain that GenEvent does not guarantee concurrent thread safety in the current version.
+- 默认发布路径的运行时开销必须足够低；
+- 该检查必须是可选的，以适配某些宿主环境自己的线程组织方式；
+- 异常消息必须明确说明：当前版本不保证并发线程安全。
 
-This feature is misuse detection only. It is not a synchronization mechanism and does not imply thread safety when disabled.
+这个能力只是误用检测，不是同步机制。关闭检查并不意味着线程安全，开启检查也不意味着已经支持并发。
 
-### 4. Minimal observability APIs
+### 4. 最小可观测 API
 
-#### Purpose
+#### 目的
 
-The goal is not to build a debugging subsystem. The goal is to let consumers quickly answer whether the runtime was initialized and whether a publisher/subscriber registration exists.
+这里不是要做完整调试系统，而是要让使用者能快速确认：当前运行时是否已初始化、事件发布器是否存在、订阅是否真的建立。
 
-#### Proposed minimum surface
+#### 最小能力范围
 
-Required:
+本次版本至少应提供：
 
 - `GenEventBootstrap.IsInitialized`
 - `HasPublisher<TGenEvent>()`
 - `GetSubscriberCount<TGenEvent, TSubscriber>()`
 
-These APIs should be narrow and read-only. They are intended for diagnostics, assertions, integration checks, and tooling support.
+这些 API 应该保持只读和窄接口定位，主要用于诊断、断言、接入检查和后续工具支持。
 
-### 5. Exception semantics
+### 5. 异常语义
 
-This release does not introduce a configurable exception handling strategy such as fail-fast vs aggregate exceptions. Existing subscriber-thrown exceptions continue to propagate.
+这一版不引入新的异常策略配置，例如 `FailFast`、`ContinueOnException`、`AggregateExceptions`。
 
-The only semantic change in this area is that bootstrap/publisher-missing failures should become explicit `InvalidOperationException`s rather than dictionary lookup failures.
+现有订阅者内部抛出的异常，仍然沿现有路径向外传播。
 
-This keeps scope focused while still improving the most confusing runtime failure mode.
+本次在异常语义上唯一要收紧的是：初始化缺失或发布器缺失时，不再暴露字典查找失败，而是抛出明确的 `InvalidOperationException`。
 
-## Testing Strategy
+这样可以在不扩大范围的前提下，优先解决当前最令人困惑的失败模式。
 
-Add or update tests to lock the intended behavior:
+## 测试策略
 
-- `Init()` is idempotent.
-- `IsInitialized` is false before init and true after init.
-- `Publish()` before init throws `InvalidOperationException` with a helpful message.
-- `PublishAsync()` before init throws `InvalidOperationException` with a helpful message.
-- repeated `Init()` does not duplicate registrations or alter correct publish behavior.
-- publishing with no subscribers still returns `true` after proper initialization.
-- debug-time thread misuse checks fail on cross-thread access when enabled.
-- nested publish behavior remains unchanged.
+增加或更新测试，锁定以下语义：
 
-Tests should prioritize semantic guarantees over implementation details.
+- `Init()` 是幂等的；
+- 初始化前 `IsInitialized == false`，初始化后 `IsInitialized == true`；
+- 初始化前调用 `Publish()` 时，抛出带清晰消息的 `InvalidOperationException`；
+- 初始化前调用 `PublishAsync()` 时，抛出带清晰消息的 `InvalidOperationException`；
+- 重复调用 `Init()` 不会导致重复注册，也不会破坏已有发布行为；
+- 正确初始化后，在无订阅者场景下发布仍然返回 `true`；
+- 开启线程检查时，跨线程调用会失败；
+- 嵌套发布行为保持不变。
 
-## Documentation Changes
+测试应以语义保证为主，而不是依赖内部实现细节。
 
-Update:
+## 文档变更
+
+需要更新：
 
 - `README.md`
 - `README_zh.md`
 
-Documentation additions should include:
+新增内容应包括：
 
-- a runtime contract section,
-- initialization examples,
-- explanation of idempotent bootstrap,
-- explicit thread-safety disclaimer,
-- common failure troubleshooting for missing initialization.
+- 独立的运行时契约章节；
+- 初始化示例；
+- `Init()` 幂等说明；
+- 明确的线程安全免责声明；
+- 初始化缺失时的常见排查说明。
 
-## Migration Impact
+## 迁移影响
 
-### Source compatibility
+### 源码兼容性
 
-Expected to remain high. Existing user code that correctly initializes GenEvent should continue to work with minimal or no changes.
+预计整体兼容性仍然较高。对已经正确初始化 GenEvent 的调用方来说，已有代码原则上应继续正常工作。
 
-### Behavioral changes
+### 行为变化
 
-- Calling `Init()` multiple times becomes explicitly supported.
-- Uninitialized publish changes from a generic dictionary exception to a clear library contract exception.
-- Consumers relying on undocumented cross-thread use may now receive clearer failures in debug-oriented configurations.
+- 多次调用 `Init()` 将被正式支持；
+- 初始化前发布的失败形式，会从通用字典异常变为明确的库级契约异常；
+- 对依赖未文档化跨线程行为的调用方，在调试期可能会更早收到失败反馈。
 
-## Risks
+## 风险
 
-- Adding `IsInitialized` to generated bootstrap code changes the generated public surface and must remain consistent across assemblies.
-- Thread ownership checks may be awkward in some hosting environments if the trigger point is chosen poorly.
-- Documentation must be precise so that "not thread-safe" is understood as an explicit contract, not an accidental omission.
+- 在生成的 `GenEventBootstrap` 上新增 `IsInitialized` 会改变生成代码的公开表面，需要保证跨程序集行为一致；
+- 如果线程归属的判定时机选得不好，某些宿主环境下可能会显得别扭；
+- 文档必须写得足够精确，确保“当前不线程安全”是明确契约，而不是模糊遗漏。
 
-## Deferred Work
+## 延后事项
 
-The following items are intentionally deferred beyond this release:
+以下内容明确延后到本次版本之后评估：
 
 - `TryPublish()` / `TryPublishAsync()`
-- configurable exception policies
-- full thread-safe mode
-- sticky/replay events
-- weak subscriptions
-- batch publish
-- Unity main-thread scheduling helpers
-- one-shot or conditional subscription helpers
+- 可配置异常策略
+- 完整线程安全模式
+- 粘性事件 / 回放事件
+- 弱引用订阅
+- 批量发布
+- Unity 主线程调度辅助
+- 一次性订阅或条件订阅辅助
 
-These should only be reconsidered after the runtime contract introduced here has proven stable.
+这些能力应该等到本设计引入的运行时契约被验证稳定后，再重新评估是否纳入。
 
-## Acceptance Criteria
+## 验收标准
 
-This design is complete when all of the following are true:
+满足以下条件时，本设计视为完成：
 
-- The runtime exposes explicit initialization state.
-- Calling `Init()` repeatedly is safe and documented.
-- Uninitialized publish failures surface as clear `InvalidOperationException`s.
-- The README files explicitly document the thread model and initialization rules.
-- Minimal runtime diagnostics exist for publisher/subscriber visibility.
-- Tests cover the new contract and pass without regressing current publish semantics.
+- 运行时可以显式暴露初始化状态；
+- 多次调用 `Init()` 是安全且有文档说明的；
+- 初始化前发布会抛出清晰的 `InvalidOperationException`；
+- README 中明确写清楚初始化规则与线程模型；
+- 提供最小运行时诊断能力，用于确认发布器/订阅关系状态；
+- 测试覆盖新的契约语义，且不回归当前发布模型。
 
-## Release Recommendation
+## 发布建议
 
-Ship this work as a stability transition release before declaring `v1.0`.
+这项工作应作为一个稳定性过渡版本发布，再决定何时进入 `v1.0`。
 
-`v1.0` should remain reserved for a later milestone where GenEvent's runtime contract, API stability, documentation quality, diagnostics, and ecosystem readiness are collectively strong enough to justify a stable-major label.
+`v1.0` 仍应保留给后续阶段：当 GenEvent 的运行时契约、API 稳定性、文档质量、诊断能力和生态接入准备度共同达到稳定标准时，再使用稳定大版本标签。
