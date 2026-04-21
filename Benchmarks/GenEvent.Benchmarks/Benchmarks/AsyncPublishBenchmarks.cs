@@ -54,4 +54,12 @@ public class AsyncPublishBenchmarks
             .OnlySubscriber(_subscribers[0])
             .PublishAsync();
     }
+
+    [Benchmark]
+    public Task<bool> PublishAsync_CustomPredicateFilter()
+    {
+        return _asyncEvent
+            .WithFilter(subscriber => ReferenceEquals(subscriber, _subscribers[0]))
+            .PublishAsync();
+    }
 }

@@ -2,7 +2,7 @@
 
 [![.NET](https://github.com/Puring103/GenEvent/actions/workflows/dotnet.yml/badge.svg)](https://github.com/Puring103/GenEvent/actions/workflows/dotnet.yml)
 
-GenEvent 是一个高性能、0 GC 的事件库，通过源码生成器在编译期生成全部派发代码，无运行时反射，兼容 .NET 与 Unity（netstandard2.0）。
+GenEvent 是一个高性能事件库，通过源码生成器在编译期生成全部派发代码，无运行时反射，兼容 .NET 与 Unity（netstandard2.0）。
 
 # 目录
 
@@ -31,11 +31,11 @@ GenEvent 是一个高性能、0 GC 的事件库，通过源码生成器在编译
 # 主要特性
 
 - **无运行时反射**：所有派发、注册代码在编译期由源码生成器生成
-- **0 GC**：事件为值类型（struct），发布路径无堆分配
+- **零分配热路径**：默认发布路径和常见内建 fluent 过滤链在稳态下不分配；自定义 `WithFilter(Predicate<object>)`、多次自定义 predicate 叠加，或超过当前内联规则容量的内建过滤链，仍可能产生分配
 - **IL2CPP 友好**：不依赖运行时反射，可安全运行在 IL2CPP/AOT 环境
 - **优先级**：通过 `[OnEvent(SubscriberPriority.XXX)]` 在编译期确定调用顺序，运行时零排序开销
 - **取消传播**：处理器返回 `false` 配合 `Cancelable()` 可中止事件派发
-- **灵活的订阅生命周期**：`StartListening` 返回 `SubscriptionHandle`（`IDisposable`），支持 `using` 自动取消，也可手动调用 `StopListening`
+- **灵活的订阅生命周期**：`StartListening` 返回轻量值类型句柄 `SubscriptionHandle`（`IDisposable`），支持 `using` 自动取消，也可手动调用 `StopListening`
 - **流式发布 API**：链式配置 `Cancelable`、`WithFilter`、`OnlyType` 等，可按需组合
 - **异步支持**：处理器可返回 `Task` / `Task<bool>`，通过 `PublishAsync` 按序 await
 - **嵌套发布**：支持在处理器内部再次发布事件，各层配置相互独立
@@ -140,7 +140,7 @@ int count = SubscriberHelper.GetSubscriberCount<DamageEvent, HUDDisplay>();
 
 ## 定义事件
 
-事件必须是 `struct` 并实现 `IGenEvent<T>`。值类型确保发布路径 0 GC、无装箱。
+事件必须是 `struct` 并实现 `IGenEvent<T>`。值类型可避免装箱，并让默认发布路径在稳态下保持零分配。
 
 ```csharp
 public struct DamageEvent : IGenEvent<DamageEvent>
@@ -207,7 +207,7 @@ bool ready = GenEventBootstrap.IsInitialized;
 
 ## 订阅生命周期
 
-`StartListening()` 将订阅者注册到事件系统，并返回一个 `SubscriptionHandle`（`IDisposable`）。持有该句柄并在合适时机 `Dispose`，即可取消订阅，等价于调用 `StopListening()`。
+`StartListening()` 将订阅者注册到事件系统，并返回一个轻量值类型句柄 `SubscriptionHandle`（`IDisposable`）。持有该句柄并在合适时机 `Dispose`，即可取消订阅，等价于调用 `StopListening()`。
 
 **推荐：持有句柄，在销毁时 Dispose**
 
@@ -312,7 +312,7 @@ new DamageEvent { Amount = 10 }.Publish();
 
 ## 发布过滤
 
-以下 API 均为**本次发布**的链式配置，仅影响当次派发，不修改订阅注册状态，可自由组合：
+以下 API 都是作用在“已配置发布值”上的链式配置，不修改订阅注册状态，可自由组合：
 
 | API                                        | 说明                                            |
 | ------------------------------------------ | ----------------------------------------------- |
@@ -326,6 +326,10 @@ new DamageEvent { Amount = 10 }.Publish();
 | `evt.ExcludeSubscribers(HashSet<object>)`  | 排除集合中的实例                                |
 
 链式配置现在会返回一个携带本次发布配置的 `ConfiguredEvent<TEvent>`。大多数链式写法无需修改；如果要把 fluent 结果存入变量，应使用 `var` 或 `ConfiguredEvent<TEvent>`，而不是原始事件类型。
+
+复用同一个 `ConfiguredEvent<TEvent>` 变量时，会复用其中保存的配置。也就是说，`configured.Publish(); configured.Publish();` 会使用同一份过滤 / Cancelable 配置发布两次。
+
+内建 fluent 过滤器，如 `OnlySubscriber`、`ExcludeSubscriber`、`OnlyType`、`ExcludeType`，在常见的内联规则路径上会保持零分配。`WithFilter(Predicate<object>)` 继续作为自定义逻辑入口保留；它是否分配取决于调用方传入的 predicate。若传入捕获外部状态的 lambda，例如 `obj => obj == target`，通常仍会分配。多个自定义 predicate 叠加，或超过当前内联规则容量的内建过滤链，也会退回到 predicate 组合路径并可能产生分配。
 
 ```csharp
 // 仅通知 UI 层，不触发游戏逻辑
@@ -351,7 +355,15 @@ new DamageEvent { Amount = 5 }.ExcludeSubscribers(exclude).Publish();
 // 如果要保存链式配置后的结果，应保存已配置事件，而不是原始事件 struct
 var configured = new DamageEvent { Amount = 5 }.ExcludeSubscriber(this);
 configured.Publish();
+configured.Publish(); // 会再次使用同一份已保存配置发布
 ```
+
+## 兼容性说明
+
+- GenEvent 目前仍处于 1.0 之前版本，底层辅助 / 运行时类型仍可能继续演进。
+- 更推荐通过 fluent 发布 API 使用配置，而不是直接构造或长期持有 `PublishConfig<TEvent>`。
+- `SubscriptionHandle` 现在是轻量值类型。
+- `GenEventFilters` 会继续保留为兼容性的 predicate 辅助 API，但零分配保证针对的是内建 fluent 发布方法，而不是直接调用这些 predicate helper。
 
 ## 异步支持
 
@@ -394,7 +406,7 @@ public class CombatLogger
 
 # .NET 基准
 
-仓库内提供了独立的 BenchmarkDotNet 项目 `Benchmarks/GenEvent.Benchmarks/`，用于做可重复的 .NET 侧性能测量。
+仓库内提供了独立的 BenchmarkDotNet 项目 `Benchmarks/GenEvent.Benchmarks/`，用于做可重复的 .NET 侧性能测量。基准会区分默认 / 内建 fluent 零分配路径与自定义 predicate fallback 路径。
 
 运行完整 benchmark：
 

@@ -15,14 +15,24 @@ namespace GenEvent
     /// via <c>StopListening</c> is preferred — existing call sites remain fully compatible.
     /// </para>
     /// </summary>
-    public sealed class SubscriptionHandle : IDisposable
+    public readonly struct SubscriptionHandle : IDisposable
     {
-        private readonly Action _stop;
-        private bool _disposed;
+        private readonly object _subscriber;
+        private readonly BaseSubscriberRegistry _registry;
+        private readonly Type _eventType;
 
-        internal SubscriptionHandle(Action stop)
+        internal SubscriptionHandle(object subscriber, BaseSubscriberRegistry registry)
         {
-            _stop = stop;
+            _subscriber = subscriber;
+            _registry = registry;
+            _eventType = null;
+        }
+
+        internal SubscriptionHandle(object subscriber, BaseSubscriberRegistry registry, Type eventType)
+        {
+            _subscriber = subscriber;
+            _registry = registry;
+            _eventType = eventType;
         }
 
         /// <summary>
@@ -31,9 +41,16 @@ namespace GenEvent
         /// </summary>
         public void Dispose()
         {
-            if (_disposed) return;
-            _disposed = true;
-            _stop?.Invoke();
+            if (_subscriber == null || _registry == null)
+                return;
+
+            if (_eventType == null)
+            {
+                _registry.StopListening(_subscriber);
+                return;
+            }
+
+            _registry.StopListening(_subscriber, _eventType);
         }
     }
 
@@ -64,7 +81,7 @@ namespace GenEvent
                 throw GenEventRuntimeGuard.CreateMissingSubscriberRegistryException(subscriber.GetType(), nameof(StartListening));
 
             iSubscriber.StartListening(subscriber);
-            return new SubscriptionHandle(() => subscriber.StopListening());
+            return new SubscriptionHandle(subscriber, iSubscriber);
         }
 
         /// <summary>
@@ -100,7 +117,10 @@ namespace GenEvent
             where TSubscriber : class
         {
             BaseSubscriberRegistry.StartListening<TSubscriber, TGenEvent>(subscriber);
-            return new SubscriptionHandle(() => subscriber.StopListening<TSubscriber, TGenEvent>());
+            if (!BaseSubscriberRegistry.Subscribers.TryGetValue(subscriber.GetType(), out var iSubscriber))
+                throw GenEventRuntimeGuard.CreateMissingSubscriberRegistryException(subscriber.GetType(), nameof(StartListening));
+
+            return new SubscriptionHandle(subscriber, iSubscriber, typeof(TGenEvent));
         }
 
         /// <summary>

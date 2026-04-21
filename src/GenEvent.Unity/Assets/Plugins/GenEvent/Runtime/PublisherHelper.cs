@@ -20,7 +20,7 @@ namespace GenEvent
         public static bool Publish<TGenEvent>(this TGenEvent gameEvent)
             where TGenEvent : struct, IGenEvent<TGenEvent>
         {
-            return PublishCore(gameEvent, new PublishConfig<TGenEvent>(), nameof(Publish));
+            return PublishCore(gameEvent, default, nameof(Publish));
         }
 
         /// <summary>
@@ -32,41 +32,27 @@ namespace GenEvent
         public static async Task<bool> PublishAsync<TGenEvent>(this TGenEvent gameEvent)
             where TGenEvent : struct, IGenEvent<TGenEvent>
         {
-            return await PublishAsyncCore(gameEvent, new PublishConfig<TGenEvent>(), nameof(PublishAsync));
+            return await PublishAsyncCore(gameEvent, default, nameof(PublishAsync));
         }
 
         /// <summary>
         /// Publishes an already configured event.
-        /// The config is consumed for this publish and then cleared.
+        /// Reusing the same configured value publishes with the same configuration again.
         /// </summary>
         public static bool Publish<TGenEvent>(this ConfiguredEvent<TGenEvent> configuredEvent)
             where TGenEvent : struct, IGenEvent<TGenEvent>
         {
-            try
-            {
-                return PublishCore(configuredEvent.Event, configuredEvent.Config, nameof(Publish));
-            }
-            finally
-            {
-                configuredEvent.Config.Reset();
-            }
+            return PublishCore(configuredEvent.Event, configuredEvent.Config, nameof(Publish));
         }
 
         /// <summary>
         /// Publishes an already configured event asynchronously.
-        /// The config is consumed for this publish and then cleared.
+        /// Reusing the same configured value publishes with the same configuration again.
         /// </summary>
         public static async Task<bool> PublishAsync<TGenEvent>(this ConfiguredEvent<TGenEvent> configuredEvent)
             where TGenEvent : struct, IGenEvent<TGenEvent>
         {
-            try
-            {
-                return await PublishAsyncCore(configuredEvent.Event, configuredEvent.Config, nameof(PublishAsync));
-            }
-            finally
-            {
-                configuredEvent.Config.Reset();
-            }
+            return await PublishAsyncCore(configuredEvent.Event, configuredEvent.Config, nameof(PublishAsync));
         }
 
         /// <summary>
@@ -78,9 +64,9 @@ namespace GenEvent
         public static ConfiguredEvent<TGenEvent> Cancelable<TGenEvent>(this TGenEvent gameEvent)
             where TGenEvent : struct, IGenEvent<TGenEvent>
         {
-            var config = new PublishConfig<TGenEvent>();
-            config.SetCancelable();
-            return new ConfiguredEvent<TGenEvent>(gameEvent, config);
+            var configuredEvent = new ConfiguredEvent<TGenEvent>(gameEvent, default);
+            configuredEvent.Config.SetCancelable();
+            return configuredEvent;
         }
 
         /// <summary>
@@ -107,9 +93,9 @@ namespace GenEvent
             if (filter == null)
                 throw new ArgumentNullException(nameof(filter));
 
-            var config = new PublishConfig<TGenEvent>();
-            config.AddFilter(filter);
-            return new ConfiguredEvent<TGenEvent>(gameEvent, config);
+            var configuredEvent = new ConfiguredEvent<TGenEvent>(gameEvent, default);
+            configuredEvent.Config.AddFilter(filter);
+            return configuredEvent;
         }
 
         /// <summary>
@@ -136,7 +122,9 @@ namespace GenEvent
         public static ConfiguredEvent<TGenEvent> ExcludeSubscriber<TGenEvent>(this TGenEvent gameEvent, object subscriber)
             where TGenEvent : struct, IGenEvent<TGenEvent>
         {
-            return gameEvent.WithFilter(GenEventFilters.ExcludeSubscriber(subscriber));
+            var configuredEvent = new ConfiguredEvent<TGenEvent>(gameEvent, default);
+            configuredEvent.Config.SetExcludeSubscriber(subscriber);
+            return configuredEvent;
         }
 
         /// <summary>
@@ -145,7 +133,8 @@ namespace GenEvent
         public static ConfiguredEvent<TGenEvent> ExcludeSubscriber<TGenEvent>(this ConfiguredEvent<TGenEvent> configuredEvent, object subscriber)
             where TGenEvent : struct, IGenEvent<TGenEvent>
         {
-            return configuredEvent.WithFilter(GenEventFilters.ExcludeSubscriber(subscriber));
+            configuredEvent.Config.SetExcludeSubscriber(subscriber);
+            return configuredEvent;
         }
 
         /// <summary>
@@ -158,7 +147,9 @@ namespace GenEvent
         public static ConfiguredEvent<TGenEvent> ExcludeSubscribers<TGenEvent>(this TGenEvent gameEvent, HashSet<object> subscribers)
             where TGenEvent : struct, IGenEvent<TGenEvent>
         {
-            return gameEvent.WithFilter(GenEventFilters.ExcludeSubscribers(subscribers));
+            var configuredEvent = new ConfiguredEvent<TGenEvent>(gameEvent, default);
+            configuredEvent.Config.SetExcludeSubscribers(subscribers);
+            return configuredEvent;
         }
 
         /// <summary>
@@ -167,7 +158,8 @@ namespace GenEvent
         public static ConfiguredEvent<TGenEvent> ExcludeSubscribers<TGenEvent>(this ConfiguredEvent<TGenEvent> configuredEvent, HashSet<object> subscribers)
             where TGenEvent : struct, IGenEvent<TGenEvent>
         {
-            return configuredEvent.WithFilter(GenEventFilters.ExcludeSubscribers(subscribers));
+            configuredEvent.Config.SetExcludeSubscribers(subscribers);
+            return configuredEvent;
         }
 
         /// <summary>
@@ -180,7 +172,9 @@ namespace GenEvent
         public static ConfiguredEvent<TGenEvent> OnlySubscriber<TGenEvent>(this TGenEvent gameEvent, object subscriber)
             where TGenEvent : struct, IGenEvent<TGenEvent>
         {
-            return gameEvent.WithFilter(GenEventFilters.OnlySubscriber(subscriber));
+            var configuredEvent = new ConfiguredEvent<TGenEvent>(gameEvent, default);
+            configuredEvent.Config.SetOnlySubscriber(subscriber);
+            return configuredEvent;
         }
 
         /// <summary>
@@ -189,7 +183,8 @@ namespace GenEvent
         public static ConfiguredEvent<TGenEvent> OnlySubscriber<TGenEvent>(this ConfiguredEvent<TGenEvent> configuredEvent, object subscriber)
             where TGenEvent : struct, IGenEvent<TGenEvent>
         {
-            return configuredEvent.WithFilter(GenEventFilters.OnlySubscriber(subscriber));
+            configuredEvent.Config.SetOnlySubscriber(subscriber);
+            return configuredEvent;
         }
 
         /// <summary>
@@ -202,7 +197,9 @@ namespace GenEvent
         public static ConfiguredEvent<TGenEvent> OnlySubscribers<TGenEvent>(this TGenEvent gameEvent, HashSet<object> subscribers)
             where TGenEvent : struct, IGenEvent<TGenEvent>
         {
-            return gameEvent.WithFilter(GenEventFilters.OnlySubscribers(subscribers));
+            var configuredEvent = new ConfiguredEvent<TGenEvent>(gameEvent, default);
+            configuredEvent.Config.SetOnlySubscribers(subscribers);
+            return configuredEvent;
         }
 
         /// <summary>
@@ -211,7 +208,8 @@ namespace GenEvent
         public static ConfiguredEvent<TGenEvent> OnlySubscribers<TGenEvent>(this ConfiguredEvent<TGenEvent> configuredEvent, HashSet<object> subscribers)
             where TGenEvent : struct, IGenEvent<TGenEvent>
         {
-            return configuredEvent.WithFilter(GenEventFilters.OnlySubscribers(subscribers));
+            configuredEvent.Config.SetOnlySubscribers(subscribers);
+            return configuredEvent;
         }
 
         /// <summary>
@@ -225,7 +223,9 @@ namespace GenEvent
             where TGenEvent : struct, IGenEvent<TGenEvent>
             where TSubscriber : class
         {
-            return gameEvent.WithFilter(GenEventFilters.OnlyType<TSubscriber>());
+            var configuredEvent = new ConfiguredEvent<TGenEvent>(gameEvent, default);
+            configuredEvent.Config.SetOnlyType(GenEventFilters.GetOnlyTypeRuleType<TSubscriber>());
+            return configuredEvent;
         }
 
         /// <summary>
@@ -235,7 +235,8 @@ namespace GenEvent
             where TGenEvent : struct, IGenEvent<TGenEvent>
             where TSubscriber : class
         {
-            return configuredEvent.WithFilter(GenEventFilters.OnlyType<TSubscriber>());
+            configuredEvent.Config.SetOnlyType(GenEventFilters.GetOnlyTypeRuleType<TSubscriber>());
+            return configuredEvent;
         }
 
         /// <summary>
@@ -249,7 +250,9 @@ namespace GenEvent
             where TGenEvent : struct, IGenEvent<TGenEvent>
             where TSubscriber : class
         {
-            return gameEvent.WithFilter(GenEventFilters.ExcludeType<TSubscriber>());
+            var configuredEvent = new ConfiguredEvent<TGenEvent>(gameEvent, default);
+            configuredEvent.Config.SetExcludeType(GenEventFilters.GetExcludeTypeRuleType<TSubscriber>());
+            return configuredEvent;
         }
 
         /// <summary>
@@ -259,7 +262,8 @@ namespace GenEvent
             where TGenEvent : struct, IGenEvent<TGenEvent>
             where TSubscriber : class
         {
-            return configuredEvent.WithFilter(GenEventFilters.ExcludeType<TSubscriber>());
+            configuredEvent.Config.SetExcludeType(GenEventFilters.GetExcludeTypeRuleType<TSubscriber>());
+            return configuredEvent;
         }
 
         /// <summary>

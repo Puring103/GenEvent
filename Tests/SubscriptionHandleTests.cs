@@ -16,6 +16,12 @@ public class SubscriptionHandleTests
     }
 
     [Test]
+    public void Handle_Type_IsValueType()
+    {
+        Assert.That(typeof(SubscriptionHandle).IsValueType, Is.True, "SubscriptionHandle should be a value type to avoid per-subscription heap allocation.");
+    }
+
+    [Test]
     public void Handle_Dispose_StopsReceivingEvents()
     {
         var subscriber = new SubscriberA();
@@ -155,5 +161,19 @@ public class SubscriptionHandleTests
         Assert.That(sub2.ReceiveCount, Is.EqualTo(2), "sub2 still active");
 
         handle2.Dispose();
+    }
+
+    [Test]
+    public void Handle_Copy_DisposeRemainsSafeAndIdempotent()
+    {
+        var subscriber = new SubscriberA();
+        var handle = subscriber.StartListening();
+        var copy = handle;
+
+        handle.Dispose();
+        Assert.DoesNotThrow(() => copy.Dispose(), "Disposing a copied handle should remain safe.");
+
+        new TestEventA { Value = 1 }.Publish();
+        Assert.That(subscriber.ReceiveCount, Is.EqualTo(0));
     }
 }

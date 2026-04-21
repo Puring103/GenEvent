@@ -73,6 +73,7 @@ public class {EventClassName} : BaseEventPublisher
 ";
 
         public const string SubscriberRegistry = @"{UsingNamespaces}
+using System;
 using System.Threading.Tasks;
 using System.CodeDom.Compiler;
 
@@ -96,6 +97,16 @@ public class {SubscriberRegistryClassName} : BaseSubscriberRegistry
         where TSubscriber : class
     {
 {StopListeningCalls}
+    }
+
+    public override void StopListening(object self)
+    {
+{StopListeningCallsBoxed}
+    }
+
+    public override void StopListening(object self, Type eventType)
+    {
+{StopListeningCallsByEventType}
     }
 }
 }

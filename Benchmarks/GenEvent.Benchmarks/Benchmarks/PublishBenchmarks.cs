@@ -76,7 +76,7 @@ public class PublishSubscriberBenchmarks
     }
 
     [Benchmark]
-    public bool Publish_WithFilter()
+    public bool Publish_BuiltInFilter()
     {
         return _publishEvent.ExcludeSubscriber(_configuredTargets[0]).Publish();
     }
@@ -88,6 +88,12 @@ public class PublishSubscriberBenchmarks
             .Cancelable()
             .OnlySubscriber(_configuredTargets[0])
             .Publish();
+    }
+
+    [Benchmark]
+    public bool Publish_CustomPredicateFilter()
+    {
+        return _publishEvent.WithFilter(subscriber => ReferenceEquals(subscriber, _configuredTargets[0])).Publish();
     }
 }
 

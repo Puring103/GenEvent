@@ -28,6 +28,25 @@ namespace GenEvent.Interface
             where TSubscriber : class;
 
         /// <summary>
+        /// Stops listening for all event types handled by the runtime subscriber instance.
+        /// </summary>
+        /// <param name="self">The subscriber instance.</param>
+        public virtual void StopListening(object self)
+        {
+            throw new NotSupportedException("This subscriber registry does not provide a boxed stop-all path.");
+        }
+
+        /// <summary>
+        /// Stops listening for a specific event type handled by the runtime subscriber instance.
+        /// </summary>
+        /// <param name="self">The subscriber instance.</param>
+        /// <param name="eventType">The event type to stop listening for.</param>
+        public virtual void StopListening(object self, Type eventType)
+        {
+            throw new NotSupportedException("This subscriber registry does not provide a boxed stop-by-event path.");
+        }
+
+        /// <summary>
         /// Starts listening for a specific event type handled by this subscriber class.
         /// </summary>
         /// <typeparam name="TSubscriber">The subscriber type.</typeparam>

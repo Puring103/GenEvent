@@ -4,7 +4,7 @@
 
 **中文文档 / Chinese:** [README_zh.md](README_zh.md)
 
-GenEvent is a high‑performance, zero‑GC event library. It uses a source generator to emit all dispatching code at compile time, requires no runtime reflection, and works with both .NET and Unity (netstandard2.0).
+GenEvent is a high‑performance event library. It uses a source generator to emit all dispatching code at compile time, requires no runtime reflection, and works with both .NET and Unity (netstandard2.0).
 
 # Table of Contents
 
@@ -33,11 +33,11 @@ GenEvent is a high‑performance, zero‑GC event library. It uses a source gene
 # Key Features
 
 - **No runtime reflection**: All dispatching and registration code is generated at compile time by a source generator.
-- **Zero GC**: Events are value types (`struct`), so the publish path allocates nothing on the heap.
+- **Zero-allocation hot path**: Default publish and common built-in fluent filter chains stay allocation-free in steady state. Custom `WithFilter(Predicate<object>)`, chained custom predicates, or built-in chains that exceed the current inline rule capacity may still allocate.
 - **IL2CPP‑friendly**: Does not rely on runtime reflection and is safe to use in IL2CPP/AOT environments.
 - **Priority support**: `[OnEvent(SubscriberPriority.XXX)]` determines invocation order at compile time, so there is no sorting cost at runtime.
 - **Propagation cancelation**: A handler can return `false`. Combined with `Cancelable()`, this stops further event dispatch.
-- **Flexible subscription lifetime**: `StartListening` returns a `SubscriptionHandle` (`IDisposable`). You can rely on `using` for automatic unsubscribe or manually call `StopListening`.
+- **Flexible subscription lifetime**: `StartListening` returns a lightweight `SubscriptionHandle` value (`IDisposable`). You can rely on `using` for automatic unsubscribe or manually call `StopListening`.
 - **Fluent publish APIs**: Chain `Cancelable`, `WithFilter`, `OnlyType`, and others to compose per‑publish behavior.
 - **Async support**: Handlers can return `Task` / `Task<bool>`, and `PublishAsync` awaits them in order.
 - **Nested publish**: Handlers can publish other events; each publish call has its own independent configuration.
@@ -142,7 +142,7 @@ int count = SubscriberHelper.GetSubscriberCount<DamageEvent, HUDDisplay>();
 
 ## Defining Events
 
-An event must be a `struct` and implement `IGenEvent<T>`. Using a value type guarantees zero‑GC dispatch with no boxing.
+An event must be a `struct` and implement `IGenEvent<T>`. Using a value type avoids boxing and keeps the default publish path allocation-free in steady state.
 
 ```csharp
 public struct DamageEvent : IGenEvent<DamageEvent>
@@ -209,7 +209,7 @@ bool ready = GenEventBootstrap.IsInitialized;
 
 ## Subscription Lifetime
 
-`StartListening()` registers a subscriber in the event system and returns a `SubscriptionHandle` (`IDisposable`). Keep this handle and dispose it when appropriate to unsubscribe; this is equivalent to calling `StopListening()`.
+`StartListening()` registers a subscriber in the event system and returns a lightweight `SubscriptionHandle` value (`IDisposable`). Keep this handle and dispose it when appropriate to unsubscribe; this is equivalent to calling `StopListening()`.
 
 **Recommended: keep the handle and dispose it on destruction**
 
@@ -314,7 +314,7 @@ new DamageEvent { Amount = 10 }.Publish();
 
 ## Publish Filters
 
-The following APIs are **per‑publish** fluent options. They affect only the current publish call and do not change subscription registration. They can be freely combined:
+The following APIs are fluent options on a configured publish value. They do not change subscription registration and can be freely combined:
 
 | API                                        | Description                                                |
 | ------------------------------------------ | ---------------------------------------------------------- |
@@ -328,6 +328,10 @@ The following APIs are **per‑publish** fluent options. They affect only the cu
 | `evt.ExcludeSubscribers(HashSet<object>)`  | Exclude all instances in the given set                     |
 
 Fluent configuration now returns a `ConfiguredEvent<TEvent>` value that carries the config for that publish path. Most chain-style code remains unchanged, but if you store the fluent result, use `var` or `ConfiguredEvent<TEvent>` instead of the raw event type.
+
+Reusing the same `ConfiguredEvent<TEvent>` variable reuses the same configuration. In other words, `configured.Publish(); configured.Publish();` will publish twice with the same filters / cancelable flag.
+
+Built-in fluent filters such as `OnlySubscriber`, `ExcludeSubscriber`, `OnlyType`, and `ExcludeType` stay on the zero-allocation hot path in the common inline-rule path. `WithFilter(Predicate<object>)` remains the escape hatch for custom logic, and whether it allocates depends on the predicate you provide. A capturing lambda such as `obj => obj == target` will typically allocate. Multiple custom predicates, or built-in filter chains that overflow the current inline rule capacity, also fall back to predicate composition and may allocate.
 
 ```csharp
 // Notify only the UI layer and avoid game logic
@@ -353,7 +357,15 @@ new DamageEvent { Amount = 5 }.ExcludeSubscribers(exclude).Publish();
 // If you keep the fluent result, store the configured event rather than the raw event struct
 var configured = new DamageEvent { Amount = 5 }.ExcludeSubscriber(this);
 configured.Publish();
+configured.Publish(); // publishes again with the same stored configuration
 ```
+
+## Compatibility Notes
+
+- GenEvent is still pre-1.0, so low-level helper/runtime types may continue to evolve.
+- Prefer the fluent publish API over constructing or persisting `PublishConfig<TEvent>` directly.
+- `SubscriptionHandle` is now a lightweight value type.
+- `GenEventFilters` remains available as a predicate helper API for compatibility, but the zero-allocation guarantee applies to the built-in fluent publish methods rather than direct use of those predicate helpers.
 
 ## Async Support
 
@@ -396,7 +408,7 @@ public class CombatLogger
 
 # .NET Benchmarks
 
-The repository includes a dedicated BenchmarkDotNet project at `Benchmarks/GenEvent.Benchmarks/` for repeatable .NET-side performance measurements.
+The repository includes a dedicated BenchmarkDotNet project at `Benchmarks/GenEvent.Benchmarks/` for repeatable .NET-side performance measurements. The suite distinguishes between the zero-allocation default / built-in fluent paths and custom predicate fallback paths.
 
 Run the full benchmark suite with:
 

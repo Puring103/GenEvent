@@ -506,12 +506,14 @@ namespace GenEvent.SourceGenerator
             var eventRegistrations = new StringBuilder();
             var startCalls = new StringBuilder();
             var stopCalls = new StringBuilder();
+            var stopCallsBoxed = new StringBuilder();
+            var stopCallsByEventType = new StringBuilder();
             var seenEventTypes = new HashSet<INamedTypeSymbol>(SymbolEqualityComparer.Default);
+            var subscriberTypeName = GetFullyQualifiedTypeName(sub.SubscriberType);
 
             foreach (var (eventType, methodName, returnsBool, isAsync) in events)
             {
                 var eventTypeName = GetFullyQualifiedTypeName(eventType);
-                var subscriberTypeName = GetFullyQualifiedTypeName(sub.SubscriberType);
                 if (isAsync)
                 {
                     var returnExpr = returnsBool
@@ -538,6 +540,12 @@ namespace GenEvent.SourceGenerator
                     var evtType = eventTypeName;
                     startCalls.AppendLine($"        GenEventRegistry<{evtType}, {concreteType}>.Register(({concreteType})(object)self);");
                     stopCalls.AppendLine($"        GenEventRegistry<{evtType}, {concreteType}>.UnRegister(({concreteType})(object)self);");
+                    stopCallsBoxed.AppendLine($"        GenEventRegistry<{evtType}, {concreteType}>.UnRegister(({concreteType})self);");
+                    stopCallsByEventType.AppendLine($"        if (eventType == typeof({evtType}))");
+                    stopCallsByEventType.AppendLine("        {");
+                    stopCallsByEventType.AppendLine($"            GenEventRegistry<{evtType}, {concreteType}>.UnRegister(({concreteType})self);");
+                    stopCallsByEventType.AppendLine("            return;");
+                    stopCallsByEventType.AppendLine("        }");
                 }
             }
 
@@ -547,7 +555,9 @@ namespace GenEvent.SourceGenerator
                 .Replace("{SubscriberFullName}", sub.SubscriberType.ToDisplayString())
                 .Replace("{EventRegistrations}", eventRegistrations.ToString().TrimEnd())
                 .Replace("{StartListeningCalls}", startCalls.ToString().TrimEnd())
-                .Replace("{StopListeningCalls}", stopCalls.ToString().TrimEnd());
+                .Replace("{StopListeningCalls}", stopCalls.ToString().TrimEnd())
+                .Replace("{StopListeningCallsBoxed}", stopCallsBoxed.ToString().TrimEnd())
+                .Replace("{StopListeningCallsByEventType}", stopCallsByEventType.ToString().TrimEnd());
         }
 
         private const string GlobalNamespaceDisplay = "<global namespace>";
