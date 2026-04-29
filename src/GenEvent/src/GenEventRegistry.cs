@@ -122,15 +122,7 @@ namespace GenEvent
 
         public static bool ContainsSubscriber(TSubscriber subscriber)
         {
-            for (int i = 0; i < SubscriberList.Count; i++)
-            {
-                if (ReferenceEquals(SubscriberList[i], subscriber))
-                {
-                    return true;
-                }
-            }
-
-            return false;
+            return SubscriberIndex.ContainsKey(subscriber);
         }
 
         /// <summary>
