@@ -894,3 +894,43 @@ public class CountingMutationTargetSubscriber
         return true;
     }
 }
+
+public class StopOtherThenStartOtherDuringPublishSubscriber
+{
+    private readonly object _target;
+    public int ReceiveCount;
+
+    public StopOtherThenStartOtherDuringPublishSubscriber(object target)
+    {
+        _target = target;
+    }
+
+    [OnEvent]
+    public bool OnTestEventA(TestEventA e)
+    {
+        ReceiveCount++;
+        _target.StopListening();
+        _target.StartListening();
+        return true;
+    }
+}
+
+public class StartOtherThenStopOtherDuringPublishSubscriber
+{
+    private readonly object _target;
+    public int ReceiveCount;
+
+    public StartOtherThenStopOtherDuringPublishSubscriber(object target)
+    {
+        _target = target;
+    }
+
+    [OnEvent]
+    public bool OnTestEventA(TestEventA e)
+    {
+        ReceiveCount++;
+        _target.StartListening();
+        _target.StopListening();
+        return true;
+    }
+}

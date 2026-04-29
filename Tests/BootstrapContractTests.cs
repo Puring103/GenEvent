@@ -83,6 +83,17 @@ public class BootstrapContractTests
     }
 
     [Test]
+    public void StopListeningForSpecificEvent_WithoutInit_ThrowsInvalidOperationException()
+    {
+        var subscriber = new MultiEventSubscriber();
+
+        var exception = Assert.Throws<InvalidOperationException>(() => subscriber.StopListening<MultiEventSubscriber, TestEventA>());
+
+        Assert.That(exception!.Message, Does.Contain(nameof(TestEventA)));
+        Assert.That(exception.Message, Does.Contain("GenEventBootstrap.Init()"));
+    }
+
+    [Test]
     public void StopListening_WithoutInit_ThrowsInvalidOperationException()
     {
         var subscriber = new SubscriberA();
