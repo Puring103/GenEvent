@@ -260,6 +260,52 @@ public class CoreFlowTests
     }
 
     [Test]
+    public void StartListening_EqualButDifferentSubscribers_BothReceive()
+    {
+        var subscriber1 = new ReferenceEqualitySubscriber { Id = 1 };
+        var subscriber2 = new ReferenceEqualitySubscriber { Id = 1 };
+        subscriber1.StartListening();
+        subscriber2.StartListening();
+
+        try
+        {
+            new TestEventA { Value = 1 }.Publish();
+
+            Assert.That(subscriber1.ReceiveCount, Is.EqualTo(1));
+            Assert.That(subscriber2.ReceiveCount, Is.EqualTo(1));
+        }
+        finally
+        {
+            subscriber1.StopListening();
+            subscriber2.StopListening();
+        }
+    }
+
+    [Test]
+    public void StopListening_EqualButDifferentSubscriber_RemovesOnlySameReference()
+    {
+        var subscriber1 = new ReferenceEqualitySubscriber { Id = 1 };
+        var subscriber2 = new ReferenceEqualitySubscriber { Id = 1 };
+        subscriber1.StartListening();
+        subscriber2.StartListening();
+
+        try
+        {
+            subscriber1.StopListening();
+
+            new TestEventA { Value = 1 }.Publish();
+
+            Assert.That(subscriber1.ReceiveCount, Is.EqualTo(0));
+            Assert.That(subscriber2.ReceiveCount, Is.EqualTo(1));
+        }
+        finally
+        {
+            subscriber1.StopListening();
+            subscriber2.StopListening();
+        }
+    }
+
+    [Test]
     public void UnregisterDuringPublish_OtherSubscribersStillReceive()
     {
         var self = new SelfUnregisteringSubscriber();

@@ -416,8 +416,8 @@ namespace GenEvent.SourceGenerator
         private static string GenerateEventPublisher(EventInfo evt, IReadOnlyList<SubscriberInfo> subscriberList, string template)
         {
             var usings = CollectUsings(evt.EventType, subscriberList.Select(s => s.SubscriberType));
-            var syncSnapshotDeclarations = new StringBuilder();
-            var syncSnapshotReturns = new StringBuilder();
+            var syncPublishScopeDeclarations = new StringBuilder();
+            var syncPublishScopeReturns = new StringBuilder();
             var syncInvocations = new StringBuilder();
             var seenSyncTypes = new HashSet<INamedTypeSymbol>(SymbolEqualityComparer.Default);
             foreach (var sub in subscriberList)
@@ -426,10 +426,9 @@ namespace GenEvent.SourceGenerator
                 if (seenSyncTypes.Add(sub.SubscriberType))
                 {
                     var subscriberTypeName = GetFullyQualifiedTypeName(sub.SubscriberType);
-                    var snapshotVariableName = GetSubscriberSnapshotVariableName(sub.SubscriberType);
-                    syncSnapshotDeclarations.AppendLine($"        var {snapshotVariableName} = GenEventRegistry<TGenEvent, {subscriberTypeName}>.TakeSubscribersSnapshot();");
-                    syncSnapshotReturns.AppendLine($"            GenEventRegistry<TGenEvent, {subscriberTypeName}>.ReturnSubscribersSnapshot({snapshotVariableName});");
-                    syncInvocations.AppendLine($"            completed = @event.Invoke<{subscriberTypeName}, TGenEvent>(config, {snapshotVariableName});");
+                    syncPublishScopeDeclarations.AppendLine($"        GenEventRegistry<TGenEvent, {subscriberTypeName}>.BeginPublish();");
+                    syncPublishScopeReturns.AppendLine($"            GenEventRegistry<TGenEvent, {subscriberTypeName}>.EndPublish();");
+                    syncInvocations.AppendLine($"            completed = @event.Invoke<{subscriberTypeName}, TGenEvent>(config, GenEventRegistry<TGenEvent, {subscriberTypeName}>.DirectSubscribers);");
                     syncInvocations.AppendLine("        if (!completed) return false;");
                     syncInvocations.AppendLine();
                 }
@@ -455,12 +454,12 @@ namespace GenEvent.SourceGenerator
                 .Replace("{UsingNamespaces}", usings)
                 .Replace("{EventClassName}", evt.GeneratedPublisherName)
                 .Replace("{EventFullName}", evt.TypeDisplayName)
-                .Replace("{SubscriberSnapshots}", syncSnapshotDeclarations.ToString().TrimEnd())
+                .Replace("{SubscriberPublishScopes}", syncPublishScopeDeclarations.ToString().TrimEnd())
                 .Replace("{SubscriberInvocations}", syncInvocations.ToString().TrimEnd())
-                .Replace("{SubscriberSnapshotReturns}", syncSnapshotReturns.ToString().TrimEnd())
-                .Replace("{SubscriberSnapshotsAsync}", asyncSnapshotDeclarations.ToString().TrimEnd())
+                .Replace("{SubscriberPublishScopeReturns}", syncPublishScopeReturns.ToString().TrimEnd())
+                .Replace("{SubscriberPublishScopesAsync}", asyncSnapshotDeclarations.ToString().TrimEnd())
                 .Replace("{SubscriberInvocationsAsync}", asyncInvocations.ToString().TrimEnd())
-                .Replace("{SubscriberSnapshotReturnsAsync}", asyncSnapshotReturns.ToString().TrimEnd());
+                .Replace("{SubscriberPublishScopeReturnsAsync}", asyncSnapshotReturns.ToString().TrimEnd());
         }
 
         private static string GetSubscriberSnapshotVariableName(INamedTypeSymbol subscriberType)

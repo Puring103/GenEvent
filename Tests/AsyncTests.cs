@@ -175,6 +175,55 @@ public class AsyncTests
     }
 
     [Test]
+    public async Task PublishAsync_OnlySubscriber_UnregisteredTarget_DoesNotReceive()
+    {
+        var target = new AsyncOnlySubscriber();
+        var registered = new AsyncOnlySubscriber();
+        registered.StartListening();
+
+        try
+        {
+            var result = await new TestEventAsync { Value = 1 }.OnlySubscriber(target).PublishAsync();
+
+            Assert.That(result, Is.True);
+            Assert.That(target.ReceiveCount, Is.EqualTo(0));
+            Assert.That(registered.ReceiveCount, Is.EqualTo(0));
+        }
+        finally
+        {
+            registered.StopListening();
+        }
+    }
+
+    [Test]
+    public async Task PublishAsync_SubscriberRegisteredWhileOtherPublishIsAwaiting_IsVisibleImmediately()
+    {
+        var blocking = new BlockingAsyncSubscriber { ShouldBlock = true };
+        var lateSubscriber = new BlockingAsyncSubscriber();
+        blocking.StartListening();
+
+        var firstPublish = new TestEventAsync { Value = 1 }.PublishAsync();
+        await blocking.Started.Task;
+
+        try
+        {
+            lateSubscriber.StartListening();
+
+            var secondResult = await new TestEventAsync { Value = 2 }.OnlySubscriber(lateSubscriber).PublishAsync();
+
+            Assert.That(secondResult, Is.True);
+            Assert.That(lateSubscriber.ReceiveCount, Is.EqualTo(1));
+        }
+        finally
+        {
+            blocking.Release.TrySetResult(true);
+            await firstPublish;
+            blocking.StopListening();
+            lateSubscriber.StopListening();
+        }
+    }
+
+    [Test]
     public async Task PublishAsync_ConfigClearedAfterPublish_SecondPublishUnaffected()
     {
         var subSync = new SyncOnlySubscriberForAsyncEvent();

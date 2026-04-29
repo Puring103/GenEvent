@@ -62,6 +62,10 @@ namespace GenEvent
         /// </summary>
         public bool Cancelable { get; private set; }
 
+        internal bool HasFilters => _ruleCount != 0 || _customFilter != null;
+
+        internal bool IsDefault => !Cancelable && !HasFilters;
+
         internal void Reset()
         {
             this = default;
@@ -137,6 +141,78 @@ namespace GenEvent
         internal void SetExcludeType(Type subscriberType)
         {
             AddInlineRule(new FilterRule(FilterRuleKind.ExcludeType, subscriberType ?? throw new ArgumentNullException(nameof(subscriberType))));
+        }
+
+        internal bool TryGetOnlySubscriber(out object subscriber)
+        {
+            if (_customFilter == null && _ruleCount == 1 && _rule0.Kind == FilterRuleKind.OnlySubscriber)
+            {
+                subscriber = _rule0.Payload;
+                return true;
+            }
+
+            subscriber = null;
+            return false;
+        }
+
+        internal bool TryGetExcludeSubscriber(out object subscriber)
+        {
+            if (_customFilter == null && _ruleCount == 1 && _rule0.Kind == FilterRuleKind.ExcludeSubscriber)
+            {
+                subscriber = _rule0.Payload;
+                return true;
+            }
+
+            subscriber = null;
+            return false;
+        }
+
+        internal bool TryGetOnlySubscribers(out HashSet<object> subscribers)
+        {
+            if (_customFilter == null && _ruleCount == 1 && _rule0.Kind == FilterRuleKind.OnlySubscribers)
+            {
+                subscribers = (HashSet<object>)_rule0.Payload;
+                return true;
+            }
+
+            subscribers = null;
+            return false;
+        }
+
+        internal bool TryGetExcludeSubscribers(out HashSet<object> subscribers)
+        {
+            if (_customFilter == null && _ruleCount == 1 && _rule0.Kind == FilterRuleKind.ExcludeSubscribers)
+            {
+                subscribers = (HashSet<object>)_rule0.Payload;
+                return true;
+            }
+
+            subscribers = null;
+            return false;
+        }
+
+        internal bool TryGetOnlyType(out Type subscriberType)
+        {
+            if (_customFilter == null && _ruleCount == 1 && _rule0.Kind == FilterRuleKind.OnlyType)
+            {
+                subscriberType = (Type)_rule0.Payload;
+                return true;
+            }
+
+            subscriberType = null;
+            return false;
+        }
+
+        internal bool TryGetExcludeType(out Type subscriberType)
+        {
+            if (_customFilter == null && _ruleCount == 1 && _rule0.Kind == FilterRuleKind.ExcludeType)
+            {
+                subscriberType = (Type)_rule0.Payload;
+                return true;
+            }
+
+            subscriberType = null;
+            return false;
         }
 
         private void AddInlineRule(FilterRule rule)

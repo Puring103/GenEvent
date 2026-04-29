@@ -39,7 +39,7 @@ public class {EventClassName} : BaseEventPublisher
     {
         bool completed = true;
 
-{SubscriberSnapshots}
+{SubscriberPublishScopes}
         try
         {
 {SubscriberInvocations}
@@ -48,7 +48,7 @@ public class {EventClassName} : BaseEventPublisher
         }
         finally
         {
-{SubscriberSnapshotReturns}
+{SubscriberPublishScopeReturns}
         }
     }
 
@@ -56,7 +56,7 @@ public class {EventClassName} : BaseEventPublisher
     {
         bool completed = true;
 
-{SubscriberSnapshotsAsync}
+{SubscriberPublishScopesAsync}
         try
         {
 {SubscriberInvocationsAsync}
@@ -65,7 +65,7 @@ public class {EventClassName} : BaseEventPublisher
         }
         finally
         {
-{SubscriberSnapshotReturnsAsync}
+{SubscriberPublishScopeReturnsAsync}
         }
     }
 }

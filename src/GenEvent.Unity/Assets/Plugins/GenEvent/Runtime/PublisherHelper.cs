@@ -308,6 +308,128 @@ namespace GenEvent
             var completed = true;
             var genEvent = GenEventRegistry<TGenEvent, TSubscriber>.GenEvent;
 
+            if (config.IsDefault)
+            {
+                if (genEvent == null)
+                {
+                    return true;
+                }
+
+                for (int i = 0; i < subscribers.Count; i++)
+                {
+                    genEvent(gameEvent, subscribers[i]);
+                }
+
+                return true;
+            }
+
+            if (config.TryGetOnlySubscriber(out var onlySubscriber))
+            {
+                if (onlySubscriber is TSubscriber typedSubscriber &&
+                    GenEventRegistry<TGenEvent, TSubscriber>.ContainsSubscriber(typedSubscriber))
+                {
+                    var shouldContinue = genEvent?.Invoke(gameEvent, typedSubscriber) ?? true;
+                    return !config.Cancelable || shouldContinue;
+                }
+
+                return true;
+            }
+
+            if (config.TryGetExcludeSubscriber(out var excludedSubscriber))
+            {
+                for (int i = 0; i < subscribers.Count; i++)
+                {
+                    var subscriber = subscribers[i];
+                    if (ReferenceEquals(subscriber, excludedSubscriber))
+                    {
+                        continue;
+                    }
+
+                    var shouldContinue = genEvent?.Invoke(gameEvent, subscriber) ?? true;
+                    if (!config.Cancelable || shouldContinue) continue;
+                    completed = false;
+                    break;
+                }
+
+                return completed;
+            }
+
+            if (config.TryGetOnlySubscribers(out var onlySubscribers))
+            {
+                for (int i = 0; i < subscribers.Count; i++)
+                {
+                    var subscriber = subscribers[i];
+                    if (!onlySubscribers.Contains(subscriber))
+                    {
+                        continue;
+                    }
+
+                    var shouldContinue = genEvent?.Invoke(gameEvent, subscriber) ?? true;
+                    if (!config.Cancelable || shouldContinue) continue;
+                    completed = false;
+                    break;
+                }
+
+                return completed;
+            }
+
+            if (config.TryGetExcludeSubscribers(out var excludedSubscribers))
+            {
+                for (int i = 0; i < subscribers.Count; i++)
+                {
+                    var subscriber = subscribers[i];
+                    if (excludedSubscribers.Contains(subscriber))
+                    {
+                        continue;
+                    }
+
+                    var shouldContinue = genEvent?.Invoke(gameEvent, subscriber) ?? true;
+                    if (!config.Cancelable || shouldContinue) continue;
+                    completed = false;
+                    break;
+                }
+
+                return completed;
+            }
+
+            if (config.TryGetOnlyType(out var onlyType))
+            {
+                for (int i = 0; i < subscribers.Count; i++)
+                {
+                    var subscriber = subscribers[i];
+                    if (!onlyType.IsInstanceOfType(subscriber))
+                    {
+                        continue;
+                    }
+
+                    var shouldContinue = genEvent?.Invoke(gameEvent, subscriber) ?? true;
+                    if (!config.Cancelable || shouldContinue) continue;
+                    completed = false;
+                    break;
+                }
+
+                return completed;
+            }
+
+            if (config.TryGetExcludeType(out var excludedType))
+            {
+                for (int i = 0; i < subscribers.Count; i++)
+                {
+                    var subscriber = subscribers[i];
+                    if (excludedType.IsInstanceOfType(subscriber))
+                    {
+                        continue;
+                    }
+
+                    var shouldContinue = genEvent?.Invoke(gameEvent, subscriber) ?? true;
+                    if (!config.Cancelable || shouldContinue) continue;
+                    completed = false;
+                    break;
+                }
+
+                return completed;
+            }
+
             for (int i = 0; i < subscribers.Count; i++)
             {
                 var subscriber = subscribers[i];
@@ -340,6 +462,229 @@ namespace GenEvent
             var completed = true;
             var genEventAsync = GenEventRegistry<TGenEvent, TSubscriber>.GenEventAsync;
             var genEvent = GenEventRegistry<TGenEvent, TSubscriber>.GenEvent;
+
+            if (config.IsDefault && genEventAsync == null)
+            {
+                if (genEvent == null)
+                {
+                    return true;
+                }
+
+                for (int i = 0; i < subscribers.Count; i++)
+                {
+                    genEvent(gameEvent, subscribers[i]);
+                }
+
+                return true;
+            }
+
+            if (config.TryGetOnlySubscriber(out var onlySubscriber))
+            {
+                if (onlySubscriber is not TSubscriber typedSubscriber ||
+                    !GenEventRegistry<TGenEvent, TSubscriber>.ContainsSubscriber(typedSubscriber))
+                {
+                    return true;
+                }
+
+                if (genEventAsync != null)
+                {
+                    var shouldContinue = await genEventAsync(gameEvent, typedSubscriber);
+                    return !config.Cancelable || shouldContinue;
+                }
+
+                var syncShouldContinue = genEvent?.Invoke(gameEvent, typedSubscriber) ?? true;
+                return !config.Cancelable || syncShouldContinue;
+            }
+
+            if (config.TryGetExcludeSubscriber(out var excludedSubscriber))
+            {
+                if (genEventAsync != null)
+                {
+                    for (int i = 0; i < subscribers.Count; i++)
+                    {
+                        var subscriber = subscribers[i];
+                        if (ReferenceEquals(subscriber, excludedSubscriber))
+                        {
+                            continue;
+                        }
+
+                        var shouldContinue = await genEventAsync(gameEvent, subscriber);
+                        if (!config.Cancelable || shouldContinue) continue;
+                        completed = false;
+                        break;
+                    }
+                }
+                else
+                {
+                    for (int i = 0; i < subscribers.Count; i++)
+                    {
+                        var subscriber = subscribers[i];
+                        if (ReferenceEquals(subscriber, excludedSubscriber))
+                        {
+                            continue;
+                        }
+
+                        var shouldContinue = genEvent?.Invoke(gameEvent, subscriber) ?? true;
+                        if (!config.Cancelable || shouldContinue) continue;
+                        completed = false;
+                        break;
+                    }
+                }
+
+                return completed;
+            }
+
+            if (config.TryGetOnlySubscribers(out var onlySubscribers))
+            {
+                if (genEventAsync != null)
+                {
+                    for (int i = 0; i < subscribers.Count; i++)
+                    {
+                        var subscriber = subscribers[i];
+                        if (!onlySubscribers.Contains(subscriber))
+                        {
+                            continue;
+                        }
+
+                        var shouldContinue = await genEventAsync(gameEvent, subscriber);
+                        if (!config.Cancelable || shouldContinue) continue;
+                        completed = false;
+                        break;
+                    }
+                }
+                else
+                {
+                    for (int i = 0; i < subscribers.Count; i++)
+                    {
+                        var subscriber = subscribers[i];
+                        if (!onlySubscribers.Contains(subscriber))
+                        {
+                            continue;
+                        }
+
+                        var shouldContinue = genEvent?.Invoke(gameEvent, subscriber) ?? true;
+                        if (!config.Cancelable || shouldContinue) continue;
+                        completed = false;
+                        break;
+                    }
+                }
+
+                return completed;
+            }
+
+            if (config.TryGetExcludeSubscribers(out var excludedSubscribers))
+            {
+                if (genEventAsync != null)
+                {
+                    for (int i = 0; i < subscribers.Count; i++)
+                    {
+                        var subscriber = subscribers[i];
+                        if (excludedSubscribers.Contains(subscriber))
+                        {
+                            continue;
+                        }
+
+                        var shouldContinue = await genEventAsync(gameEvent, subscriber);
+                        if (!config.Cancelable || shouldContinue) continue;
+                        completed = false;
+                        break;
+                    }
+                }
+                else
+                {
+                    for (int i = 0; i < subscribers.Count; i++)
+                    {
+                        var subscriber = subscribers[i];
+                        if (excludedSubscribers.Contains(subscriber))
+                        {
+                            continue;
+                        }
+
+                        var shouldContinue = genEvent?.Invoke(gameEvent, subscriber) ?? true;
+                        if (!config.Cancelable || shouldContinue) continue;
+                        completed = false;
+                        break;
+                    }
+                }
+
+                return completed;
+            }
+
+            if (config.TryGetOnlyType(out var onlyType))
+            {
+                if (genEventAsync != null)
+                {
+                    for (int i = 0; i < subscribers.Count; i++)
+                    {
+                        var subscriber = subscribers[i];
+                        if (!onlyType.IsInstanceOfType(subscriber))
+                        {
+                            continue;
+                        }
+
+                        var shouldContinue = await genEventAsync(gameEvent, subscriber);
+                        if (!config.Cancelable || shouldContinue) continue;
+                        completed = false;
+                        break;
+                    }
+                }
+                else
+                {
+                    for (int i = 0; i < subscribers.Count; i++)
+                    {
+                        var subscriber = subscribers[i];
+                        if (!onlyType.IsInstanceOfType(subscriber))
+                        {
+                            continue;
+                        }
+
+                        var shouldContinue = genEvent?.Invoke(gameEvent, subscriber) ?? true;
+                        if (!config.Cancelable || shouldContinue) continue;
+                        completed = false;
+                        break;
+                    }
+                }
+
+                return completed;
+            }
+
+            if (config.TryGetExcludeType(out var excludedType))
+            {
+                if (genEventAsync != null)
+                {
+                    for (int i = 0; i < subscribers.Count; i++)
+                    {
+                        var subscriber = subscribers[i];
+                        if (excludedType.IsInstanceOfType(subscriber))
+                        {
+                            continue;
+                        }
+
+                        var shouldContinue = await genEventAsync(gameEvent, subscriber);
+                        if (!config.Cancelable || shouldContinue) continue;
+                        completed = false;
+                        break;
+                    }
+                }
+                else
+                {
+                    for (int i = 0; i < subscribers.Count; i++)
+                    {
+                        var subscriber = subscribers[i];
+                        if (excludedType.IsInstanceOfType(subscriber))
+                        {
+                            continue;
+                        }
+
+                        var shouldContinue = genEvent?.Invoke(gameEvent, subscriber) ?? true;
+                        if (!config.Cancelable || shouldContinue) continue;
+                        completed = false;
+                        break;
+                    }
+                }
+
+                return completed;
+            }
 
             if (genEventAsync != null)
             {

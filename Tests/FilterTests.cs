@@ -66,6 +66,67 @@ public class FilterTests
     }
 
     [Test]
+    public void OnlySubscriber_NonCancelableFalseReturn_DoesNotAffectPublishResult()
+    {
+        var cancelSub = new CancelSubscriber { ShouldCancel = true };
+        cancelSub.StartListening();
+
+        try
+        {
+            var result = new TestEventA { Value = 1 }.OnlySubscriber(cancelSub).Publish();
+
+            Assert.That(result, Is.True);
+            Assert.That(cancelSub.ReceiveCount, Is.EqualTo(1));
+        }
+        finally
+        {
+            cancelSub.StopListening();
+        }
+    }
+
+    [Test]
+    public void OnlySubscriber_UnregisteredTarget_DoesNotReceive()
+    {
+        var target = new SubscriberA();
+        var registered = new SubscriberA();
+        registered.StartListening();
+
+        try
+        {
+            var result = new TestEventA { Value = 1 }.OnlySubscriber(target).Publish();
+
+            Assert.That(result, Is.True);
+            Assert.That(target.ReceiveCount, Is.EqualTo(0));
+            Assert.That(registered.ReceiveCount, Is.EqualTo(0));
+        }
+        finally
+        {
+            registered.StopListening();
+        }
+    }
+
+    [Test]
+    public void OnlySubscriber_UsesReferenceEqualityForTarget()
+    {
+        var target = new ReferenceEqualitySubscriber { Id = 1 };
+        var equalButDifferentRegistered = new ReferenceEqualitySubscriber { Id = 1 };
+        equalButDifferentRegistered.StartListening();
+
+        try
+        {
+            var result = new TestEventA { Value = 1 }.OnlySubscriber(target).Publish();
+
+            Assert.That(result, Is.True);
+            Assert.That(target.ReceiveCount, Is.EqualTo(0));
+            Assert.That(equalButDifferentRegistered.ReceiveCount, Is.EqualTo(0));
+        }
+        finally
+        {
+            equalButDifferentRegistered.StopListening();
+        }
+    }
+
+    [Test]
     public void ExcludeSubscribers_HashSet_ExcludedSubscribersDoNotReceive()
     {
         var subA = new SubscriberA();

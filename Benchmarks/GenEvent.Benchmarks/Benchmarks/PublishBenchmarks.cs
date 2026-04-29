@@ -1,10 +1,12 @@
 using BenchmarkDotNet.Attributes;
+using BenchmarkDotNet.Jobs;
 using GenEvent;
 using GenEvent.Benchmarks.Fixtures;
 
 namespace GenEvent.Benchmarks.Benchmarks;
 
 [MemoryDiagnoser]
+[ShortRunJob]
 public class PublishBenchmarks
 {
     private PublishBenchEvent _publishEvent;
@@ -30,9 +32,10 @@ public class PublishBenchmarks
 }
 
 [MemoryDiagnoser]
+[ShortRunJob]
 public class PublishSubscriberBenchmarks
 {
-    [Params(1, 10, 100)]
+    [Params(1, 10)]
     public int SubscriberCount { get; set; }
 
     private PublishBenchEvent _publishEvent;
@@ -98,6 +101,7 @@ public class PublishSubscriberBenchmarks
 }
 
 [MemoryDiagnoser]
+[ShortRunJob]
 public class PublishCancelableBenchmarks
 {
     private CancelBenchEvent _cancelEvent;
@@ -131,6 +135,7 @@ public class PublishCancelableBenchmarks
 }
 
 [MemoryDiagnoser]
+[ShortRunJob]
 public class PublishNestedBenchmarks
 {
     private OuterNestedBenchEvent _nestedEvent;

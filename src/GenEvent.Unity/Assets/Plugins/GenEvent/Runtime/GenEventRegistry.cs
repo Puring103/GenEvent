@@ -1,4 +1,6 @@
+using System;
 using System.Collections.Generic;
+using System.Runtime.CompilerServices;
 using System.Threading.Tasks;
 using GenEvent.Interface;
 
@@ -50,11 +52,29 @@ namespace GenEvent
         /// <summary>
         /// Map from subscriber to index in SubscriberList, for O(1) removal.
         /// </summary>
-        private static readonly Dictionary<TSubscriber, int> SubscriberIndex = new();
+        private static readonly Dictionary<TSubscriber, int> SubscriberIndex = new(ReferenceEqualityComparer<TSubscriber>.Instance);
 
-        /// <summary>
-        /// Reusable snapshot buffers for publish-time iteration stability.
-        /// </summary>
+        private enum PendingOperationKind : byte
+        {
+            Register,
+            Unregister
+        }
+
+        private readonly struct PendingOperation
+        {
+            public PendingOperation(PendingOperationKind kind, TSubscriber subscriber)
+            {
+                Kind = kind;
+                Subscriber = subscriber;
+            }
+
+            public PendingOperationKind Kind { get; }
+
+            public TSubscriber Subscriber { get; }
+        }
+
+        private static int _publishDepth;
+        private static readonly List<PendingOperation> PendingOperations = new();
         private static readonly List<List<TSubscriber>> SnapshotPool = new(SnapshotPoolCapacity);
 
         /// <summary>
@@ -69,11 +89,10 @@ namespace GenEvent
 
         public static IReadOnlyList<TSubscriber> Subscribers => SubscriberList;
 
+        public static IReadOnlyList<TSubscriber> DirectSubscribers => SubscriberList;
+
         public static int SubscriberCount => SubscriberList.Count;
 
-        /// <summary>
-        /// Takes a stable snapshot of current subscribers using a pooled list.
-        /// </summary>
         public static List<TSubscriber> TakeSubscribersSnapshot()
         {
             List<TSubscriber> snapshot;
@@ -92,9 +111,6 @@ namespace GenEvent
             return snapshot;
         }
 
-        /// <summary>
-        /// Clears and returns a subscriber snapshot buffer to the pool.
-        /// </summary>
         public static void ReturnSubscribersSnapshot(List<TSubscriber> snapshot)
         {
             snapshot.Clear();
@@ -102,6 +118,19 @@ namespace GenEvent
             {
                 SnapshotPool.Add(snapshot);
             }
+        }
+
+        public static bool ContainsSubscriber(TSubscriber subscriber)
+        {
+            for (int i = 0; i < SubscriberList.Count; i++)
+            {
+                if (ReferenceEquals(SubscriberList[i], subscriber))
+                {
+                    return true;
+                }
+            }
+
+            return false;
         }
 
         /// <summary>
@@ -123,12 +152,65 @@ namespace GenEvent
             GenEventAsync = genEventAsyncDelegate;
         }
 
+        public static void BeginPublish()
+        {
+            _publishDepth++;
+        }
+
+        public static void EndPublish()
+        {
+            if (_publishDepth <= 0)
+            {
+                throw new InvalidOperationException("EndPublish was called without a matching BeginPublish.");
+            }
+
+            _publishDepth--;
+            if (_publishDepth == 0)
+            {
+                ApplyPendingOperations();
+            }
+        }
+
+        private static void ApplyPendingOperations()
+        {
+            if (PendingOperations.Count == 0)
+            {
+                return;
+            }
+
+            for (int i = 0; i < PendingOperations.Count; i++)
+            {
+                var operation = PendingOperations[i];
+                if (operation.Kind == PendingOperationKind.Register)
+                {
+                    RegisterImmediate(operation.Subscriber);
+                }
+                else
+                {
+                    UnRegisterImmediate(operation.Subscriber);
+                }
+            }
+
+            PendingOperations.Clear();
+        }
+
         /// <summary>
         /// Registers a subscriber for the event.
         /// Duplicate registration is ignored (idempotent).
         /// </summary>
         /// <param name="observer">The subscriber to register.</param>
         public static void Register(TSubscriber observer)
+        {
+            if (_publishDepth > 0)
+            {
+                PendingOperations.Add(new PendingOperation(PendingOperationKind.Register, observer));
+                return;
+            }
+
+            RegisterImmediate(observer);
+        }
+
+        private static void RegisterImmediate(TSubscriber observer)
         {
             if (SubscriberIndex.ContainsKey(observer))
                 return;
@@ -144,6 +226,17 @@ namespace GenEvent
         /// <param name="observer">The subscriber to unregister.</param>
         public static void UnRegister(TSubscriber observer)
         {
+            if (_publishDepth > 0)
+            {
+                PendingOperations.Add(new PendingOperation(PendingOperationKind.Unregister, observer));
+                return;
+            }
+
+            UnRegisterImmediate(observer);
+        }
+
+        private static void UnRegisterImmediate(TSubscriber observer)
+        {
             if (!SubscriberIndex.TryGetValue(observer, out var index))
                 return;
             var lastIndex = SubscriberList.Count - 1;
@@ -155,6 +248,25 @@ namespace GenEvent
                 SubscriberIndex[last] = index;
             }
             SubscriberList.RemoveAt(lastIndex);
+        }
+    }
+
+    internal sealed class ReferenceEqualityComparer<T> : IEqualityComparer<T>
+    {
+        public static readonly ReferenceEqualityComparer<T> Instance = new();
+
+        private ReferenceEqualityComparer()
+        {
+        }
+
+        public bool Equals(T x, T y)
+        {
+            return ReferenceEquals(x, y);
+        }
+
+        public int GetHashCode(T obj)
+        {
+            return RuntimeHelpers.GetHashCode(obj);
         }
     }
 }

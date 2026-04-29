@@ -54,6 +54,52 @@ public class SubscriberB
     }
 }
 
+public class ReferenceEqualitySubscriber
+{
+    public int Id;
+    public int ReceiveCount;
+
+    [OnEvent]
+    public bool OnTestEventA(TestEventA e)
+    {
+        ReceiveCount++;
+        return true;
+    }
+
+    public override bool Equals(object? obj)
+    {
+        return obj is ReferenceEqualitySubscriber other && Id == other.Id;
+    }
+
+    public override int GetHashCode()
+    {
+        return Id;
+    }
+}
+
+public class ReferenceEqualitySubscriberForB
+{
+    public int Id;
+    public int ReceiveCount;
+
+    [OnEvent]
+    public bool OnTestEventB(TestEventB e)
+    {
+        ReceiveCount++;
+        return true;
+    }
+
+    public override bool Equals(object? obj)
+    {
+        return obj is ReferenceEqualitySubscriberForB other && Id == other.Id;
+    }
+
+    public override int GetHashCode()
+    {
+        return Id;
+    }
+}
+
 public class SubscriberC
 {
     public int ReceiveCount;
@@ -582,6 +628,27 @@ public class AsyncRepublishDifferentEventSubscriber
     }
 }
 
+public class BlockingAsyncSubscriber
+{
+    public bool ShouldBlock { get; set; }
+    public int ReceiveCount;
+    public TaskCompletionSource<bool> Started { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+    public TaskCompletionSource<bool> Release { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+    [OnEvent]
+    public async Task<bool> OnTestEventAsync(TestEventAsync e)
+    {
+        ReceiveCount++;
+        if (ShouldBlock)
+        {
+            Started.TrySetResult(true);
+            await Release.Task;
+        }
+
+        return true;
+    }
+}
+
 /// <summary>
 /// Subscriber that throws in sync handler, used to verify exception propagation.
 /// </summary>
@@ -685,5 +752,145 @@ public class InheritChildAsync : InheritBase
         await Task.Yield();
         ReceiveCount++;
         LastValue = e.Value;
+    }
+}
+
+public class StopSelfDuringPublishSubscriber
+{
+    public int ReceiveCount;
+
+    [OnEvent]
+    public bool OnTestEventA(TestEventA e)
+    {
+        ReceiveCount++;
+        this.StopListening();
+        return true;
+    }
+}
+
+public class StopOtherDuringPublishSubscriber
+{
+    private readonly object _target;
+
+    public StopOtherDuringPublishSubscriber(object target)
+    {
+        _target = target;
+    }
+
+    public int ReceiveCount;
+
+    [OnEvent]
+    public bool OnTestEventA(TestEventA e)
+    {
+        ReceiveCount++;
+        _target.StopListening();
+        return true;
+    }
+}
+
+public class StopOtherAndRepublishDuringPublishSubscriber
+{
+    private readonly object _target;
+
+    public StopOtherAndRepublishDuringPublishSubscriber(object target)
+    {
+        _target = target;
+    }
+
+    public int ReceiveCount;
+
+    [OnEvent]
+    public bool OnTestEventA(TestEventA e)
+    {
+        ReceiveCount++;
+        _target.StopListening();
+        if (ReceiveCount == 1)
+        {
+            new TestEventA { Value = e.Value + 1 }.Publish();
+        }
+
+        return true;
+    }
+}
+
+public class StartOtherDuringPublishSubscriber
+{
+    private readonly object _target;
+
+    public StartOtherDuringPublishSubscriber(object target)
+    {
+        _target = target;
+    }
+
+    public int ReceiveCount;
+
+    [OnEvent]
+    public bool OnTestEventA(TestEventA e)
+    {
+        ReceiveCount++;
+        _target.StartListening();
+        return true;
+    }
+}
+
+public class StartOtherAndPublishOnlySubscriberDuringPublishSubscriber
+{
+    private readonly object _target;
+
+    public StartOtherAndPublishOnlySubscriberDuringPublishSubscriber(object target)
+    {
+        _target = target;
+    }
+
+    public int ReceiveCount;
+
+    [OnEvent]
+    public bool OnTestEventA(TestEventA e)
+    {
+        ReceiveCount++;
+        if (ReceiveCount == 1)
+        {
+            _target.StartListening();
+            new TestEventA { Value = e.Value + 1 }.OnlySubscriber(_target).Publish();
+        }
+
+        return true;
+    }
+}
+
+public class StopOtherAndPublishOnlySubscriberDuringPublishSubscriber
+{
+    private readonly object _target;
+
+    public StopOtherAndPublishOnlySubscriberDuringPublishSubscriber(object target)
+    {
+        _target = target;
+    }
+
+    public int ReceiveCount;
+
+    [OnEvent]
+    public bool OnTestEventA(TestEventA e)
+    {
+        ReceiveCount++;
+        if (ReceiveCount == 1)
+        {
+            _target.StopListening();
+            new TestEventA { Value = e.Value + 1 }.OnlySubscriber(_target).Publish();
+        }
+
+        return true;
+    }
+}
+
+public class CountingMutationTargetSubscriber
+{
+    public int ReceiveCount;
+
+    [OnEvent]
+    public bool OnTestEventA(TestEventA e)
+    {
+        ReceiveCount++;
+        return true;
     }
 }

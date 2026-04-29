@@ -1,13 +1,15 @@
 using BenchmarkDotNet.Attributes;
+using BenchmarkDotNet.Jobs;
 using GenEvent;
 using GenEvent.Benchmarks.Fixtures;
 
 namespace GenEvent.Benchmarks.Benchmarks;
 
 [MemoryDiagnoser]
+[ShortRunJob]
 public class LifecycleBenchmarks
 {
-    [Params(1, 10, 100)]
+    [Params(1, 10)]
     public int SubscriberCount { get; set; }
 
     private LifecycleSubscriber[] _subscribers = Array.Empty<LifecycleSubscriber>();
