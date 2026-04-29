@@ -166,4 +166,24 @@ public class PublishMutationTests
         Assert.That(stopper.ReceiveCount, Is.EqualTo(1));
         Assert.That(target.ReceiveCount, Is.EqualTo(1));
     }
+
+    [Test]
+    public async Task PublishAsync_StartListening_DuringPublish_IsDeferred_NotImmediatelyVisible()
+    {
+        var newSub = new SyncOnlySubscriberForAsyncEvent();
+        var checker = new AsyncStartOtherAndCheckCountSubscriber(newSub);
+        checker.StartListening();
+
+        await new TestEventAsync { Value = 1 }.PublishAsync();
+
+        // With deferred semantics: StartListening(newSub) is queued during async publish,
+        // so the count was 0 during the handler. After publish ends, pending is applied.
+        Assert.That(checker.CountDuringPublish, Is.EqualTo(0),
+            "StartListening called during PublishAsync must be deferred: count must be 0 during the publish");
+        Assert.That(SubscriberHelper.GetSubscriberCount<TestEventAsync, SyncOnlySubscriberForAsyncEvent>(), Is.EqualTo(1),
+            "After PublishAsync ends, pending StartListening must have been applied");
+
+        newSub.StopListening();
+        checker.StopListening();
+    }
 }
