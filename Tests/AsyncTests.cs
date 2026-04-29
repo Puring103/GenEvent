@@ -196,7 +196,7 @@ public class AsyncTests
     }
 
     [Test]
-    public async Task PublishAsync_SubscriberRegisteredWhileOtherPublishIsAwaiting_IsVisibleImmediately()
+    public async Task PublishAsync_SubscriberRegisteredWhileOtherPublishIsAwaiting_IsDeferredUntilPublishEnds()
     {
         var blocking = new BlockingAsyncSubscriber { ShouldBlock = true };
         var lateSubscriber = new BlockingAsyncSubscriber();
@@ -207,17 +207,22 @@ public class AsyncTests
 
         try
         {
+            // StartListening is deferred because the first publish holds depth > 0
             lateSubscriber.StartListening();
 
+            // OnlySubscriber publish does not see lateSubscriber yet (still pending)
             var secondResult = await new TestEventAsync { Value = 2 }.OnlySubscriber(lateSubscriber).PublishAsync();
 
             Assert.That(secondResult, Is.True);
-            Assert.That(lateSubscriber.ReceiveCount, Is.EqualTo(1));
+            Assert.That(lateSubscriber.ReceiveCount, Is.EqualTo(0),
+                "lateSubscriber registered during an in-flight PublishAsync must not be visible until the outer publish completes");
         }
         finally
         {
             blocking.Release.TrySetResult(true);
             await firstPublish;
+            // After first publish ends, pending StartListening is applied
+            Assert.That(SubscriberHelper.GetSubscriberCount<TestEventAsync, BlockingAsyncSubscriber>(), Is.EqualTo(2));
             blocking.StopListening();
             lateSubscriber.StopListening();
         }

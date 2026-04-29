@@ -442,10 +442,9 @@ namespace GenEvent.SourceGenerator
             {
                 if (!seenAsyncTypes.Add(sub.SubscriberType)) continue;
                 var subscriberTypeName = GetFullyQualifiedTypeName(sub.SubscriberType);
-                var snapshotVariableName = GetSubscriberSnapshotVariableName(sub.SubscriberType);
-                asyncSnapshotDeclarations.AppendLine($"        var {snapshotVariableName} = GenEventRegistry<TGenEvent, {subscriberTypeName}>.TakeSubscribersSnapshot();");
-                asyncSnapshotReturns.AppendLine($"            GenEventRegistry<TGenEvent, {subscriberTypeName}>.ReturnSubscribersSnapshot({snapshotVariableName});");
-                asyncInvocations.AppendLine($"            completed = await @event.InvokeAsync<{subscriberTypeName}, TGenEvent>(config, {snapshotVariableName});");
+                asyncSnapshotDeclarations.AppendLine($"        GenEventRegistry<TGenEvent, {subscriberTypeName}>.BeginPublish();");
+                asyncSnapshotReturns.AppendLine($"            GenEventRegistry<TGenEvent, {subscriberTypeName}>.EndPublish();");
+                asyncInvocations.AppendLine($"            completed = await @event.InvokeAsync<{subscriberTypeName}, TGenEvent>(config, GenEventRegistry<TGenEvent, {subscriberTypeName}>.DirectSubscribers);");
                 asyncInvocations.AppendLine("        if (!completed) return false;");
                 asyncInvocations.AppendLine();
             }

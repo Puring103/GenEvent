@@ -42,8 +42,6 @@ namespace GenEvent
     public static class GenEventRegistry<TGenEvent, TSubscriber>
         where TGenEvent : struct, IGenEvent<TGenEvent>
     {
-        private const int SnapshotPoolCapacity = 16;
-
         /// <summary>
         /// List of subscribers for iteration (no holes; removal uses swap-with-last).
         /// </summary>
@@ -75,7 +73,6 @@ namespace GenEvent
 
         private static int _publishDepth;
         private static readonly List<PendingOperation> PendingOperations = new();
-        private static readonly List<List<TSubscriber>> SnapshotPool = new(SnapshotPoolCapacity);
 
         /// <summary>
         /// Delegate for handling events.
@@ -92,33 +89,6 @@ namespace GenEvent
         public static IReadOnlyList<TSubscriber> DirectSubscribers => SubscriberList;
 
         public static int SubscriberCount => SubscriberList.Count;
-
-        public static List<TSubscriber> TakeSubscribersSnapshot()
-        {
-            List<TSubscriber> snapshot;
-            if (SnapshotPool.Count > 0)
-            {
-                var index = SnapshotPool.Count - 1;
-                snapshot = SnapshotPool[index];
-                SnapshotPool.RemoveAt(index);
-            }
-            else
-            {
-                snapshot = new List<TSubscriber>(SubscriberList.Count);
-            }
-
-            snapshot.AddRange(SubscriberList);
-            return snapshot;
-        }
-
-        public static void ReturnSubscribersSnapshot(List<TSubscriber> snapshot)
-        {
-            snapshot.Clear();
-            if (SnapshotPool.Count < SnapshotPoolCapacity)
-            {
-                SnapshotPool.Add(snapshot);
-            }
-        }
 
         public static bool ContainsSubscriber(TSubscriber subscriber)
         {
