@@ -84,6 +84,28 @@ public class AllocationRegressionTests
     }
 
     [Test]
+    public void PublishAsync_DefaultPath_HasNoSteadyStateAllocations()
+    {
+        var subscriber = new SyncOnlySubscriberForAsyncEvent();
+        subscriber.StartListening();
+
+        try
+        {
+            Warmup(() => new TestEventAsync { Value = 1 }.PublishAsync().GetAwaiter().GetResult());
+
+            var allocatedBytes = MeasureAverageAllocation(
+                () => new TestEventAsync { Value = 1 }.PublishAsync().GetAwaiter().GetResult());
+
+            Assert.That(allocatedBytes, Is.EqualTo(0),
+                "PublishAsync with sync-only subscriber should not allocate in steady state.");
+        }
+        finally
+        {
+            subscriber.StopListening();
+        }
+    }
+
+    [Test]
     public void StartListening_ReturnHandlePath_HasNoSteadyStateAllocations()
     {
         var subscriber = new SubscriberA();

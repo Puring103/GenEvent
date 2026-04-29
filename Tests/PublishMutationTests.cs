@@ -168,6 +168,18 @@ public class PublishMutationTests
     }
 
     [Test]
+    public async Task PublishAsync_StopListening_DuringPublish_TakesEffectOnNextPublish()
+    {
+        var selfStopping = new AsyncStopSelfDuringPublishSubscriber();
+        selfStopping.StartListening();
+
+        await new TestEventAsync { Value = 1 }.PublishAsync();
+        await new TestEventAsync { Value = 2 }.PublishAsync();
+
+        Assert.That(selfStopping.ReceiveCount, Is.EqualTo(1));
+    }
+
+    [Test]
     public async Task PublishAsync_StartListening_DuringPublish_IsDeferred_NotImmediatelyVisible()
     {
         var newSub = new SyncOnlySubscriberForAsyncEvent();
