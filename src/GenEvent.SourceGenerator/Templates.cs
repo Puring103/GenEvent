@@ -8,7 +8,7 @@ using GenEvent.Interface;
 
 namespace GenEvent
 {
-[GeneratedCode(""GenEvent"",""V0.5"")]
+[GeneratedCode(""GenEvent"",""V0.10"")]
 public static class GenEventBootstrap
 {
     public static bool IsInitialized { get; private set; }
@@ -32,7 +32,7 @@ using System.CodeDom.Compiler;
 
 namespace GenEvent
 {
-[GeneratedCode(""GenEvent"",""V0.5"")]
+[GeneratedCode(""GenEvent"",""V0.10"")]
 public class {EventClassName} : BaseEventPublisher
 {
     public override bool Publish<TGenEvent>(TGenEvent @event, PublishConfig<TGenEvent> config)
@@ -79,7 +79,7 @@ using System.CodeDom.Compiler;
 
 namespace GenEvent
 {
-[GeneratedCode(""GenEvent"",""V0.5"")]
+[GeneratedCode(""GenEvent"",""V0.10"")]
 public class {SubscriberRegistryClassName} : BaseSubscriberRegistry
 {
     static {SubscriberRegistryClassName}()
