@@ -934,3 +934,37 @@ public class StartOtherThenStopOtherDuringPublishSubscriber
         return true;
     }
 }
+
+public class AsyncStopSelfDuringPublishSubscriber
+{
+    public int ReceiveCount;
+
+    [OnEvent]
+    public async Task<bool> OnTestEventAsync(TestEventAsync e)
+    {
+        await Task.Yield();
+        ReceiveCount++;
+        this.StopListening();
+        return true;
+    }
+}
+
+public class AsyncStartOtherAndCheckCountSubscriber
+{
+    private readonly SyncOnlySubscriberForAsyncEvent _other;
+    public int CountDuringPublish = -1;
+
+    public AsyncStartOtherAndCheckCountSubscriber(SyncOnlySubscriberForAsyncEvent other)
+    {
+        _other = other;
+    }
+
+    [OnEvent]
+    public async Task<bool> OnTestEventAsync(TestEventAsync e)
+    {
+        await Task.Yield();
+        _other.StartListening();
+        CountDuringPublish = SubscriberHelper.GetSubscriberCount<TestEventAsync, SyncOnlySubscriberForAsyncEvent>();
+        return true;
+    }
+}
