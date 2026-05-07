@@ -72,7 +72,7 @@ namespace GenEvent.SourceGenerator
                 foreach (var sub in subscribers.GroupBy(s => s.SubscriberType, SymbolEqualityComparer.Default).Select(g => g.First()))
                 {
                     if (!subscriberToEvents.TryGetValue(sub.SubscriberType, out var evtList))
-                        evtList = new List<(INamedTypeSymbol EventType, string MethodName, bool ReturnsBool, bool IsAsync)>();
+                        evtList = new List<(INamedTypeSymbol EventType, string MethodName, bool ReturnsBool, bool IsAsync, bool IsStatic)>();
                     var source = GenerateSubscriberRegistry(sub, evtList, subscriberRegistryTemplate);
                     context.AddSource($"{GetGeneratedSubscriberRegistryName(sub.SubscriberType)}.g.cs", SourceText.From(source, Encoding.UTF8));
                 }
@@ -87,13 +87,28 @@ namespace GenEvent.SourceGenerator
                         return $"        BaseSubscriberRegistry.Subscribers[typeof({GetFullyQualifiedTypeName(subscriberType)})] = new {GetGeneratedSubscriberRegistryName(subscriberType)}();";
                     }));
 
+                // Auto-register static handlers once at bootstrap time
+                var staticRegistrations = new StringBuilder();
+                var seenStaticKeys = new HashSet<string>();
+                foreach (var sub in subscribers.Where(s => s.IsStatic))
+                {
+                    var eventTypeName = GetFullyQualifiedTypeName(sub.EventType);
+                    var tokenClassName = GetStaticTokenClassName(sub.SubscriberType);
+                    var key = $"{eventTypeName}|{tokenClassName}";
+                    if (seenStaticKeys.Add(key))
+                    {
+                        staticRegistrations.AppendLine($"        GenEventRegistry<{eventTypeName}, {tokenClassName}>.Register({tokenClassName}.Instance);");
+                    }
+                }
+
                 var initAttribute = hasUnity
                     ? "[UnityEngine.RuntimeInitializeOnLoadMethod(UnityEngine.RuntimeInitializeLoadType.AfterAssembliesLoaded)]"
                     : "";
                 var bootstrapSource = Templates.GenEventBootstrap
                     .Replace("{InitAttribute}", initAttribute)
                     .Replace("{PublisherRegistrations}", publisherRegistrations)
-                    .Replace("{SubscriberRegistrations}", subscriberRegistrations);
+                    .Replace("{SubscriberRegistrations}", subscriberRegistrations)
+                    .Replace("{StaticRegistrations}", staticRegistrations.ToString().TrimEnd());
                 context.AddSource("GenEventBootstrap.g.cs", SourceText.From(bootstrapSource, Encoding.UTF8));
             }
             catch (Exception ex)
@@ -277,6 +292,8 @@ namespace GenEvent.SourceGenerator
                     if (containingType == null || containingType.TypeKind != TypeKind.Class)
                         continue;
 
+                    var isStaticMethod = methodSymbol.IsStatic;
+
                     if (!eventMethodsByClass.TryGetValue(containingType, out var eventDict))
                         eventMethodsByClass[containingType] = eventDict = new Dictionary<INamedTypeSymbol, List<(IMethodSymbol, Location, bool, SubscriberPriority)>>(SymbolEqualityComparer.Default);
 
@@ -305,7 +322,8 @@ namespace GenEvent.SourceGenerator
                         Method = methodSymbol,
                         EventType = paramType,
                         Priority = priority,
-                        IsAsync = isAsync
+                        IsAsync = isAsync,
+                        IsStatic = isStaticMethod
                     });
                 }
             }
@@ -356,13 +374,16 @@ namespace GenEvent.SourceGenerator
 
                             foreach (var (method, _, isAsync, inheritedPriority) in kvp.Value)
                             {
+                                if (method.IsStatic)
+                                    continue; // Static methods don't participate in virtual dispatch
                                 subscribers.Add(new SubscriberInfo
                                 {
                                     SubscriberType = classType,
                                     Method = method,
                                     EventType = eventType,
                                     Priority = inheritedPriority,
-                                    IsAsync = isAsync
+                                    IsAsync = isAsync,
+                                    IsStatic = false
                                 });
                             }
                         }
@@ -394,21 +415,27 @@ namespace GenEvent.SourceGenerator
             }
             foreach (var list in map.Values)
             {
-                list.Sort((a, b) => ((int)a.Priority).CompareTo((int)b.Priority));
+                list.Sort((a, b) =>
+                {
+                    var cmp = ((int)a.Priority).CompareTo((int)b.Priority);
+                    if (cmp != 0) return cmp;
+                    // Static handlers before instance handlers within same priority
+                    return (a.IsStatic ? 0 : 1).CompareTo(b.IsStatic ? 0 : 1);
+                });
             }
             return map;
         }
 
-        private static Dictionary<INamedTypeSymbol, List<(INamedTypeSymbol EventType, string MethodName, bool ReturnsBool, bool IsAsync)>> BuildSubscriberEventMap(List<SubscriberInfo> subscribers)
+        private static Dictionary<INamedTypeSymbol, List<(INamedTypeSymbol EventType, string MethodName, bool ReturnsBool, bool IsAsync, bool IsStatic)>> BuildSubscriberEventMap(List<SubscriberInfo> subscribers)
         {
-            var map = new Dictionary<INamedTypeSymbol, List<(INamedTypeSymbol, string, bool, bool)>>(SymbolEqualityComparer.Default);
+            var map = new Dictionary<INamedTypeSymbol, List<(INamedTypeSymbol, string, bool, bool, bool)>>(SymbolEqualityComparer.Default);
             foreach (var s in subscribers)
             {
                 if (!map.TryGetValue(s.SubscriberType, out var list))
-                    map[s.SubscriberType] = list = new List<(INamedTypeSymbol, string, bool, bool)>();
+                    map[s.SubscriberType] = list = new List<(INamedTypeSymbol, string, bool, bool, bool)>();
                 var returnsBool = s.Method.ReturnType.SpecialType == SpecialType.System_Boolean
                     || (s.IsAsync && s.Method.ReturnType is INamedTypeSymbol nt && nt.TypeArguments.Length == 1 && nt.TypeArguments[0].SpecialType == SpecialType.System_Boolean);
-                list.Add((s.EventType, s.Method.Name, returnsBool, s.IsAsync));
+                list.Add((s.EventType, s.Method.Name, returnsBool, s.IsAsync, s.IsStatic));
             }
             return map;
         }
@@ -419,16 +446,16 @@ namespace GenEvent.SourceGenerator
             var syncPublishScopeDeclarations = new StringBuilder();
             var syncPublishScopeReturns = new StringBuilder();
             var syncInvocations = new StringBuilder();
-            var seenSyncTypes = new HashSet<INamedTypeSymbol>(SymbolEqualityComparer.Default);
+            var seenSyncKeys = new HashSet<string>();
             foreach (var sub in subscriberList)
             {
                 if (sub.IsAsync) continue;
-                if (seenSyncTypes.Add(sub.SubscriberType))
+                var keyTypeName = GetRegistryKeyTypeName(sub);
+                if (seenSyncKeys.Add(keyTypeName))
                 {
-                    var subscriberTypeName = GetFullyQualifiedTypeName(sub.SubscriberType);
-                    syncPublishScopeDeclarations.AppendLine($"        GenEventRegistry<TGenEvent, {subscriberTypeName}>.BeginPublish();");
-                    syncPublishScopeReturns.AppendLine($"            GenEventRegistry<TGenEvent, {subscriberTypeName}>.EndPublish();");
-                    syncInvocations.AppendLine($"            completed = @event.Invoke<{subscriberTypeName}, TGenEvent>(config, GenEventRegistry<TGenEvent, {subscriberTypeName}>.DirectSubscribers);");
+                    syncPublishScopeDeclarations.AppendLine($"        GenEventRegistry<TGenEvent, {keyTypeName}>.BeginPublish();");
+                    syncPublishScopeReturns.AppendLine($"            GenEventRegistry<TGenEvent, {keyTypeName}>.EndPublish();");
+                    syncInvocations.AppendLine($"            completed = @event.Invoke<{keyTypeName}, TGenEvent>(config, GenEventRegistry<TGenEvent, {keyTypeName}>.DirectSubscribers);");
                     syncInvocations.AppendLine("        if (!completed) return false;");
                     syncInvocations.AppendLine();
                 }
@@ -437,14 +464,14 @@ namespace GenEvent.SourceGenerator
             var asyncSnapshotDeclarations = new StringBuilder();
             var asyncSnapshotReturns = new StringBuilder();
             var asyncInvocations = new StringBuilder();
-            var seenAsyncTypes = new HashSet<INamedTypeSymbol>(SymbolEqualityComparer.Default);
+            var seenAsyncKeys = new HashSet<string>();
             foreach (var sub in subscriberList)
             {
-                if (!seenAsyncTypes.Add(sub.SubscriberType)) continue;
-                var subscriberTypeName = GetFullyQualifiedTypeName(sub.SubscriberType);
-                asyncSnapshotDeclarations.AppendLine($"        GenEventRegistry<TGenEvent, {subscriberTypeName}>.BeginPublish();");
-                asyncSnapshotReturns.AppendLine($"            GenEventRegistry<TGenEvent, {subscriberTypeName}>.EndPublish();");
-                asyncInvocations.AppendLine($"            completed = await @event.InvokeAsync<{subscriberTypeName}, TGenEvent>(config, GenEventRegistry<TGenEvent, {subscriberTypeName}>.DirectSubscribers);");
+                var keyTypeName = GetRegistryKeyTypeName(sub);
+                if (!seenAsyncKeys.Add(keyTypeName)) continue;
+                asyncSnapshotDeclarations.AppendLine($"        GenEventRegistry<TGenEvent, {keyTypeName}>.BeginPublish();");
+                asyncSnapshotReturns.AppendLine($"            GenEventRegistry<TGenEvent, {keyTypeName}>.EndPublish();");
+                asyncInvocations.AppendLine($"            completed = await @event.InvokeAsync<{keyTypeName}, TGenEvent>(config, GenEventRegistry<TGenEvent, {keyTypeName}>.DirectSubscribers);");
                 asyncInvocations.AppendLine("        if (!completed) return false;");
                 asyncInvocations.AppendLine();
             }
@@ -481,6 +508,18 @@ namespace GenEvent.SourceGenerator
             return type.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
         }
 
+        private static string GetStaticTokenClassName(INamedTypeSymbol subscriberType)
+        {
+            return "GenEventStaticToken_" + SanitizeIdentifier(GetFullyQualifiedTypeName(subscriberType));
+        }
+
+        private static string GetRegistryKeyTypeName(SubscriberInfo sub)
+        {
+            return sub.IsStatic
+                ? GetStaticTokenClassName(sub.SubscriberType)
+                : GetFullyQualifiedTypeName(sub.SubscriberType);
+        }
+
         private static string SanitizeIdentifier(string value)
         {
             var builder = new StringBuilder(value.Length);
@@ -493,12 +532,12 @@ namespace GenEvent.SourceGenerator
         }
 
         private static string GenerateSubscriberRegistry(SubscriberInfo sub,
-            IReadOnlyList<(INamedTypeSymbol EventType, string MethodName, bool ReturnsBool, bool IsAsync)> subscriberEvents,
+            IReadOnlyList<(INamedTypeSymbol EventType, string MethodName, bool ReturnsBool, bool IsAsync, bool IsStatic)> subscriberEvents,
             string template)
         {
             var events = subscriberEvents.Count > 0
                 ? subscriberEvents
-                : new List<(INamedTypeSymbol, string, bool, bool)> { (sub.EventType, sub.Method.Name, sub.Method.ReturnType.SpecialType == SpecialType.System_Boolean, sub.IsAsync) };
+                : new List<(INamedTypeSymbol, string, bool, bool, bool)> { (sub.EventType, sub.Method.Name, sub.Method.ReturnType.SpecialType == SpecialType.System_Boolean, sub.IsAsync, sub.IsStatic) };
 
             var usings = CollectUsings(sub.SubscriberType, events.Select(e => e.EventType));
             var eventRegistrations = new StringBuilder();
@@ -506,49 +545,90 @@ namespace GenEvent.SourceGenerator
             var stopCalls = new StringBuilder();
             var stopCallsBoxed = new StringBuilder();
             var stopCallsByEventType = new StringBuilder();
-            var seenEventTypes = new HashSet<INamedTypeSymbol>(SymbolEqualityComparer.Default);
+            var seenInstanceEventTypes = new HashSet<INamedTypeSymbol>(SymbolEqualityComparer.Default);
+            var seenStaticEventTypes = new HashSet<INamedTypeSymbol>(SymbolEqualityComparer.Default);
             var subscriberTypeName = GetFullyQualifiedTypeName(sub.SubscriberType);
 
-            foreach (var (eventType, methodName, returnsBool, isAsync) in events)
+            foreach (var (eventType, methodName, returnsBool, isAsync, isStatic) in events)
             {
                 var eventTypeName = GetFullyQualifiedTypeName(eventType);
+                var keyTypeName = isStatic
+                    ? GetStaticTokenClassName(sub.SubscriberType)
+                    : subscriberTypeName;
+
                 if (isAsync)
                 {
-                    var returnExpr = returnsBool
-                        ? "return await subscriber." + methodName + "(gameEvent);"
-                        : "await subscriber." + methodName + "(gameEvent); return true;";
-                    eventRegistrations.AppendLine($"        GenEventRegistry<{eventTypeName}, {subscriberTypeName}>.InitializeAsync(async (gameEvent, subscriber) =>");
-                    eventRegistrations.AppendLine("        {");
-                    eventRegistrations.AppendLine($"            {returnExpr}");
-                    eventRegistrations.AppendLine("        });");
+                    if (isStatic)
+                    {
+                        var returnExpr = returnsBool
+                            ? $"return await {subscriberTypeName}.{methodName}(gameEvent);"
+                            : $"await {subscriberTypeName}.{methodName}(gameEvent); return true;";
+                        eventRegistrations.AppendLine($"        GenEventRegistry<{eventTypeName}, {keyTypeName}>.InitializeAsync(async (gameEvent, _) =>");
+                        eventRegistrations.AppendLine("        {");
+                        eventRegistrations.AppendLine($"            {returnExpr}");
+                        eventRegistrations.AppendLine("        });");
+                    }
+                    else
+                    {
+                        var returnExpr = returnsBool
+                            ? "return await subscriber." + methodName + "(gameEvent);"
+                            : "await subscriber." + methodName + "(gameEvent); return true;";
+                        eventRegistrations.AppendLine($"        GenEventRegistry<{eventTypeName}, {keyTypeName}>.InitializeAsync(async (gameEvent, subscriber) =>");
+                        eventRegistrations.AppendLine("        {");
+                        eventRegistrations.AppendLine($"            {returnExpr}");
+                        eventRegistrations.AppendLine("        });");
+                    }
                 }
                 else
                 {
-                    var returnExpr = returnsBool ? "return subscriber." + methodName + "(gameEvent);" : "subscriber." + methodName + "(gameEvent); return true;";
-                    eventRegistrations.AppendLine($"        GenEventRegistry<{eventTypeName}, {subscriberTypeName}>.Initialize((gameEvent, subscriber) =>");
-                    eventRegistrations.AppendLine("        {");
-                    eventRegistrations.AppendLine($"            {returnExpr}");
-                    eventRegistrations.AppendLine("        });");
+                    if (isStatic)
+                    {
+                        var returnExpr = returnsBool
+                            ? $"return {subscriberTypeName}.{methodName}(gameEvent);"
+                            : $"{subscriberTypeName}.{methodName}(gameEvent); return true;";
+                        eventRegistrations.AppendLine($"        GenEventRegistry<{eventTypeName}, {keyTypeName}>.Initialize((gameEvent, _) =>");
+                        eventRegistrations.AppendLine("        {");
+                        eventRegistrations.AppendLine($"            {returnExpr}");
+                        eventRegistrations.AppendLine("        });");
+                    }
+                    else
+                    {
+                        var returnExpr = returnsBool ? "return subscriber." + methodName + "(gameEvent);" : "subscriber." + methodName + "(gameEvent); return true;";
+                        eventRegistrations.AppendLine($"        GenEventRegistry<{eventTypeName}, {keyTypeName}>.Initialize((gameEvent, subscriber) =>");
+                        eventRegistrations.AppendLine("        {");
+                        eventRegistrations.AppendLine($"            {returnExpr}");
+                        eventRegistrations.AppendLine("        });");
+                    }
                 }
                 eventRegistrations.AppendLine();
 
-                if (seenEventTypes.Add(eventType))
+                if (isStatic)
                 {
-                    var concreteType = subscriberTypeName;
+                    // Static handlers are auto-registered at bootstrap; no Start/Stop calls needed
+                    seenStaticEventTypes.Add(eventType);
+                }
+                else if (seenInstanceEventTypes.Add(eventType))
+                {
                     var evtType = eventTypeName;
-                    startCalls.AppendLine($"        GenEventRegistry<{evtType}, {concreteType}>.Register(({concreteType})(object)self);");
-                    stopCalls.AppendLine($"        GenEventRegistry<{evtType}, {concreteType}>.UnRegister(({concreteType})(object)self);");
-                    stopCallsBoxed.AppendLine($"        GenEventRegistry<{evtType}, {concreteType}>.UnRegister(({concreteType})self);");
+                    startCalls.AppendLine($"        GenEventRegistry<{evtType}, {subscriberTypeName}>.Register(({subscriberTypeName})(object)self);");
+                    stopCalls.AppendLine($"        GenEventRegistry<{evtType}, {subscriberTypeName}>.UnRegister(({subscriberTypeName})(object)self);");
+                    stopCallsBoxed.AppendLine($"        GenEventRegistry<{evtType}, {subscriberTypeName}>.UnRegister(({subscriberTypeName})self);");
                     stopCallsByEventType.AppendLine($"        if (eventType == typeof({evtType}))");
                     stopCallsByEventType.AppendLine("        {");
-                    stopCallsByEventType.AppendLine($"            GenEventRegistry<{evtType}, {concreteType}>.UnRegister(({concreteType})self);");
+                    stopCallsByEventType.AppendLine($"            GenEventRegistry<{evtType}, {subscriberTypeName}>.UnRegister(({subscriberTypeName})self);");
                     stopCallsByEventType.AppendLine("            return;");
                     stopCallsByEventType.AppendLine("        }");
                 }
             }
 
+            var hasStaticMethods = events.Any(e => e.IsStatic);
+            var staticTokenClass = hasStaticMethods
+                ? $"internal sealed class {GetStaticTokenClassName(sub.SubscriberType)} : global::GenEvent.IStaticSubscriberToken {{ internal static readonly {GetStaticTokenClassName(sub.SubscriberType)} Instance = new(); }}"
+                : "";
+
             return template
                 .Replace("{UsingNamespaces}", usings)
+                .Replace("{StaticTokenClass}", staticTokenClass)
                 .Replace("{SubscriberRegistryClassName}", GetGeneratedSubscriberRegistryName(sub.SubscriberType))
                 .Replace("{SubscriberFullName}", sub.SubscriberType.ToDisplayString())
                 .Replace("{EventRegistrations}", eventRegistrations.ToString().TrimEnd())
@@ -596,6 +676,7 @@ namespace GenEvent.SourceGenerator
             public INamedTypeSymbol EventType { get; set; }
             public SubscriberPriority Priority { get; set; }
             public bool IsAsync { get; set; }
+            public bool IsStatic { get; set; }
         }
     }
 }

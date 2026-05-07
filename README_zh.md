@@ -17,6 +17,7 @@ GenEvent 是一个高性能事件库，通过源码生成器在编译期生成�
 - [核心 API](#核心-api)
   - [定义事件](#定义事件)
   - [定义订阅者与处理器](#定义订阅者与处理器)
+    - [静态处理器](#静态处理器)
   - [初始化](#初始化)
   - [订阅生命周期](#订阅生命周期)
   - [发布事件](#发布事件)
@@ -39,6 +40,7 @@ GenEvent 是一个高性能事件库，通过源码生成器在编译期生成�
 - **流式发布 API**：链式配置 `Cancelable`、`WithFilter`、`OnlyType` 等，可按需组合
 - **异步支持**：处理器可返回 `Task` / `Task<bool>`，通过 `PublishAsync` 按序 await
 - **嵌套发布**：支持在处理器内部再次发布事件，各层配置相互独立
+- **静态处理器**：`[OnEvent]` 可以标注 `static` 方法（普通类或 `static` 类均可）。静态处理器在 `GenEventBootstrap.Init()` 时自动注册，生命周期与程序一致，无需也无法调用 `StartListening` / `StopListening`
 
 # 快速开始
 
@@ -189,6 +191,47 @@ public class ShieldSystem
 ```
 
 同一 class 对同一事件最多定义**一个同步**和**一个异步**处理器，分别由 `Publish` 和 `PublishAsync` 触发。
+
+### 静态处理器
+
+`[OnEvent]` 也可以标注 `static` 方法。静态处理器与实例处理器有三点不同：
+
+1. **自动生命周期**：在 `GenEventBootstrap.Init()` 时自动注册一次，并在整个程序生命周期内保持激活。无需也无法调用 `StartListening` / `StopListening`。
+2. **无需实例**：适用于普通类和 `static` 类。
+3. **调用顺序**：在相同优先级内，静态处理器**先于**实例处理器被调用。
+
+```csharp
+// 静态类 —— 整个类作为全局处理器
+public static class GameSystems
+{
+    [OnEvent]
+    public static bool OnPlayerDeath(PlayerDeathEvent e)
+    {
+        // 全局常驻，无需 StartListening
+        return true;
+    }
+}
+
+// 普通类 —— 静态与实例处理器混用
+public class PlayerController
+{
+    // 静态处理器：全局常驻
+    [OnEvent]
+    public static void OnReset(ResetEvent e)
+    {
+        ResetAllPlayers();
+    }
+
+    // 实例处理器：仅在该实例 StartListening 期间生效
+    [OnEvent]
+    public void OnDamage(DamageEvent e)
+    {
+        TakeDamage(e.Amount);
+    }
+}
+```
+
+对某个 `PlayerController` 实例调用 `StopListening()` 时，`OnDamage` 被注销，但 `OnReset` 仍保持激活——它与任何实例无关。
 
 ## 初始化
 
@@ -432,7 +475,7 @@ benchmark 结果更适合用于同一台机器、同一套配置下的版本趋�
 
 **处理器方法约束**
 
-- 必须是 `public` 实例方法
+- 必须是 `public` 方法（实例或 `static` 均可）
 - 必须有且仅有一个参数，且类型为实现了 `IGenEvent<>` 的事件类型
 - 返回类型只能是 `void`、`bool`、`Task` 或 `Task<bool>`
 - 同一 class 对同一事件类型，最多一个 sync handler 和一个 async handler

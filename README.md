@@ -19,6 +19,7 @@ GenEvent is a high‑performance event library. It uses a source generator to em
 - [Core APIs](#core-apis)
   - [Defining Events](#defining-events)
   - [Defining Subscribers and Handlers](#defining-subscribers-and-handlers)
+    - [Static Handlers](#static-handlers)
   - [Initialization](#initialization)
   - [Subscription Lifetime](#subscription-lifetime)
   - [Publishing Events](#publishing-events)
@@ -41,6 +42,7 @@ GenEvent is a high‑performance event library. It uses a source generator to em
 - **Fluent publish APIs**: Chain `Cancelable`, `WithFilter`, `OnlyType`, and others to compose per‑publish behavior.
 - **Async support**: Handlers can return `Task` / `Task<bool>`, and `PublishAsync` awaits them in order.
 - **Nested publish**: Handlers can publish other events; each publish call has its own independent configuration.
+- **Static handlers**: `[OnEvent]` can be applied to `static` methods (in regular or `static` classes). Static handlers are registered automatically at bootstrap and remain active for the lifetime of the program—no `StartListening` / `StopListening` call is required or possible.
 
 # Getting Started
 
@@ -191,6 +193,47 @@ public class ShieldSystem
 ```
 
 A single class can define at most **one sync** and **one async** handler for the same event type. They are invoked by `Publish` and `PublishAsync` respectively.
+
+### Static Handlers
+
+`[OnEvent]` can also be applied to `static` methods. Static handlers behave differently from instance handlers in three ways:
+
+1. **Automatic lifetime**: They are registered once when `GenEventBootstrap.Init()` runs and stay registered for the entire program lifetime. You never call `StartListening` or `StopListening` for them.
+2. **No instance required**: Works in both regular classes and `static` classes.
+3. **Invocation order**: Within the same priority level, static handlers are called **before** instance handlers.
+
+```csharp
+// Static class — the entire class is a global handler
+public static class GameSystems
+{
+    [OnEvent]
+    public static bool OnPlayerDeath(PlayerDeathEvent e)
+    {
+        // Always active; no StartListening needed
+        return true;
+    }
+}
+
+// Regular class — mix static and instance handlers freely
+public class PlayerController
+{
+    // Static handler: global, always active
+    [OnEvent]
+    public static void OnReset(ResetEvent e)
+    {
+        ResetAllPlayers();
+    }
+
+    // Instance handler: active only while this instance is listening
+    [OnEvent]
+    public void OnDamage(DamageEvent e)
+    {
+        TakeDamage(e.Amount);
+    }
+}
+```
+
+When `StopListening()` is called on a `PlayerController` instance, `OnDamage` is unregistered but `OnReset` remains active—it is independent of any instance.
 
 ## Initialization
 
@@ -434,7 +477,7 @@ The generator enforces a clear set of rules for events and `[OnEvent]` methods. 
 
 **Handler method constraints**
 
-- Must be a `public` instance method.
+- Must be a `public` method (instance or `static`).
 - Must take exactly one parameter whose type implements `IGenEvent<>`.
 - Return type must be `void`, `bool`, `Task`, or `Task<bool>`.
 - For a given class and event type, there can be at most one sync handler and one async handler.

@@ -21,6 +21,7 @@ public static class GenEventBootstrap
 
 {PublisherRegistrations}
 {SubscriberRegistrations}
+{StaticRegistrations}
         IsInitialized = true;
     }
 }
@@ -79,6 +80,7 @@ using System.CodeDom.Compiler;
 
 namespace GenEvent
 {
+{StaticTokenClass}
 [GeneratedCode(""GenEvent"",""V0.10"")]
 public class {SubscriberRegistryClassName} : BaseSubscriberRegistry
 {

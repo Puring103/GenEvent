@@ -726,6 +726,100 @@ public class InheritChildMultiEvent : InheritBase
     public void OnInheritTestEventB(InheritTestEventB e) => EventBCount++;
 }
 
+// ---- Static subscriber tests ----
+
+public struct StaticTestEvent : IGenEvent<StaticTestEvent>
+{
+    public int Value;
+}
+
+public struct StaticTestEventB : IGenEvent<StaticTestEventB>
+{
+    public int Value;
+}
+
+/// <summary>Static class with a static [OnEvent] handler.</summary>
+public static class StaticOnlySubscriber
+{
+    public static int ReceiveCount;
+    public static int LastValue;
+
+    [OnEvent]
+    public static bool OnStaticTestEvent(StaticTestEvent e)
+    {
+        ReceiveCount++;
+        LastValue = e.Value;
+        return true;
+    }
+}
+
+/// <summary>Static class with void-return static handler.</summary>
+public static class StaticVoidSubscriber
+{
+    public static int ReceiveCount;
+
+    [OnEvent]
+    public static void OnStaticTestEvent(StaticTestEvent e)
+    {
+        ReceiveCount++;
+    }
+}
+
+/// <summary>Mixed class: static handler for StaticTestEvent, instance handler for StaticTestEventB.</summary>
+public class MixedStaticInstanceSubscriber
+{
+    public int InstanceReceiveCount;
+    public int InstanceLastValue;
+
+    [OnEvent]
+    public static bool OnStaticTestEvent(StaticTestEvent e)
+    {
+        MixedStaticCount++;
+        MixedStaticLastValue = e.Value;
+        return true;
+    }
+
+    [OnEvent]
+    public bool OnStaticTestEventB(StaticTestEventB e)
+    {
+        InstanceReceiveCount++;
+        InstanceLastValue = e.Value;
+        return true;
+    }
+
+    public static int MixedStaticCount;
+    public static int MixedStaticLastValue;
+}
+
+/// <summary>Static class with a static [OnEvent] that cancels propagation.</summary>
+public static class StaticCancelSubscriber
+{
+    public static int ReceiveCount;
+    public static bool ShouldCancel;
+
+    [OnEvent]
+    public static bool OnStaticTestEvent(StaticTestEvent e)
+    {
+        ReceiveCount++;
+        return !ShouldCancel;
+    }
+}
+
+/// <summary>Instance subscriber for StaticTestEvent, used to verify ordering (static before instance).</summary>
+public class InstanceSubscriberForStaticEvent
+{
+    public static int StaticCountAtTimeOfCall;
+    public int ReceiveCount;
+
+    [OnEvent]
+    public bool OnStaticTestEvent(StaticTestEvent e)
+    {
+        StaticCountAtTimeOfCall = StaticOnlySubscriber.ReceiveCount;
+        ReceiveCount++;
+        return true;
+    }
+}
+
 /// <summary>
 /// GrandChild inherits from InheritChild and has its own [OnEvent] for InheritTestEventB.
 /// When StartListening is called (even via InheritBase.Subscribe), GrandChild is
