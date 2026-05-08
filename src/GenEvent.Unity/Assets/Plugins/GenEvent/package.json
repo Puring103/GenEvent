@@ -1,7 +1,7 @@
 {
   "name": "com.puring.genevent",
   "displayName": "GenEvent",
-  "version": "1.0.0",
+  "version": "0.11.1",
   "unity": "2022.3",
   "description": "GenEvent is a high-performance, 0GC and attribute-based Event library using code generation, without runtime reflection.",
   "keywords": [

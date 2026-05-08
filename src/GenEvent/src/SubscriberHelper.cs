@@ -85,6 +85,34 @@ namespace GenEvent
         }
 
         /// <summary>
+        /// Attempts to start listening for all event types handled by this subscriber.
+        /// Returns false when the current runtime type has no generated subscriber registry.
+        /// Use this for shared lifecycle code where not every instance is necessarily a GenEvent subscriber.
+        /// </summary>
+        public static bool TryStartListening<TSubscriber>(this TSubscriber subscriber, out SubscriptionHandle handle)
+            where TSubscriber : class
+        {
+            if (!BaseSubscriberRegistry.Subscribers.TryGetValue(subscriber.GetType(), out var iSubscriber))
+            {
+                handle = default;
+                return false;
+            }
+
+            iSubscriber.StartListening(subscriber);
+            handle = new SubscriptionHandle(subscriber, iSubscriber);
+            return true;
+        }
+
+        /// <summary>
+        /// Returns true when the current runtime type has a generated subscriber registry.
+        /// </summary>
+        public static bool HasSubscriberRegistry<TSubscriber>(this TSubscriber subscriber)
+            where TSubscriber : class
+        {
+            return BaseSubscriberRegistry.Subscribers.ContainsKey(subscriber.GetType());
+        }
+
+        /// <summary>
         /// Stops listening for all event types handled by this subscriber.
         /// </summary>
         /// <typeparam name="TSubscriber">The subscriber type.</typeparam>
@@ -96,6 +124,20 @@ namespace GenEvent
                 throw GenEventRuntimeGuard.CreateMissingSubscriberRegistryException(subscriber.GetType(), nameof(StopListening));
 
             iSubscriber.StopListening(subscriber);
+        }
+
+        /// <summary>
+        /// Attempts to stop listening for all event types handled by this subscriber.
+        /// Returns false when the current runtime type has no generated subscriber registry.
+        /// </summary>
+        public static bool TryStopListening<TSubscriber>(this TSubscriber subscriber)
+            where TSubscriber : class
+        {
+            if (!BaseSubscriberRegistry.Subscribers.TryGetValue(subscriber.GetType(), out var iSubscriber))
+                return false;
+
+            iSubscriber.StopListening(subscriber);
+            return true;
         }
 
         /// <summary>

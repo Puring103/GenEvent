@@ -134,10 +134,12 @@ Use these APIs for quick runtime checks:
 
 ```csharp
 bool hasPublisher = PublisherHelper.HasPublisher<DamageEvent>();
+bool hasSubscriberRegistry = hud.HasSubscriberRegistry();
 int count = SubscriberHelper.GetSubscriberCount<DamageEvent, HUDDisplay>();
 ```
 
 - `HasPublisher<TEvent>()`: confirms whether the generated publisher is registered.
+- `HasSubscriberRegistry()`: confirms whether the runtime subscriber type has a generated registry.
 - `GetSubscriberCount<TEvent, TSubscriber>()`: reports how many subscriber instances are currently registered for that event/subscriber pair.
 
 # Core APIs
@@ -288,6 +290,30 @@ subscriber.StopListening(); // unsubscribe manually
 ```
 
 `SubscriptionHandle.Dispose()` is idempotent and safe to call multiple times.
+
+**Optional subscription for shared lifecycle code**
+
+`StartListening()` and `StopListening()` are strict APIs: they throw if the runtime type has no generated subscriber registry. When writing shared base classes or UI lifecycle code where some instances may not define `[OnEvent]` handlers, use the `Try` APIs:
+
+```csharp
+private SubscriptionHandle _handle;
+
+void OnEnable()
+{
+    if (this.TryStartListening(out var handle))
+        _handle = handle;
+}
+
+void OnDisable()
+{
+    _handle.Dispose();
+
+    // Or, when you do not keep a handle:
+    this.TryStopListening();
+}
+```
+
+`TryStartListening(out handle)` and `TryStopListening()` return `false` when the runtime type has no generated subscriber registry. They do not hide publish initialization errors for actual events; they are intended for optional subscriber lifecycles.
 
 **Subscribe to only one event type** (when a subscriber handles multiple event types):
 

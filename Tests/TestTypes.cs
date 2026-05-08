@@ -42,6 +42,10 @@ public class SubscriberA
     }
 }
 
+public class NonSubscriber
+{
+}
+
 public class SubscriberB
 {
     public int ReceiveCount;

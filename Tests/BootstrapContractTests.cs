@@ -104,6 +104,55 @@ public class BootstrapContractTests
     }
 
     [Test]
+    public void TryStartListening_ForTypeWithoutOnEvent_ReturnsFalse()
+    {
+        GenEventBootstrap.Init();
+        var subscriber = new NonSubscriber();
+
+        var started = subscriber.TryStartListening(out var handle);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(started, Is.False);
+            Assert.That(subscriber.HasSubscriberRegistry(), Is.False);
+        });
+
+        handle.Dispose();
+    }
+
+    [Test]
+    public void TryStopListening_ForTypeWithoutOnEvent_ReturnsFalse()
+    {
+        GenEventBootstrap.Init();
+        var subscriber = new NonSubscriber();
+
+        var stopped = subscriber.TryStopListening();
+
+        Assert.That(stopped, Is.False);
+    }
+
+    [Test]
+    public void TryStartListening_ForSubscriber_StartsAndReturnsHandle()
+    {
+        GenEventBootstrap.Init();
+        var subscriber = new SubscriberA();
+
+        var started = subscriber.TryStartListening(out var handle);
+
+        new TestEventA { Value = 10 }.Publish();
+        handle.Dispose();
+        new TestEventA { Value = 11 }.Publish();
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(started, Is.True);
+            Assert.That(subscriber.HasSubscriberRegistry(), Is.True);
+            Assert.That(subscriber.ReceiveCount, Is.EqualTo(1));
+            Assert.That(subscriber.LastValue, Is.EqualTo(10));
+        });
+    }
+
+    [Test]
     public void HasPublisher_ReturnsFalseBeforeInit_AndTrueAfterInit()
     {
         Assert.That(PublisherHelper.HasPublisher<TestEventA>(), Is.False);

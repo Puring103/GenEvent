@@ -132,10 +132,12 @@ if (!GenEventBootstrap.IsInitialized)
 
 ```csharp
 bool hasPublisher = PublisherHelper.HasPublisher<DamageEvent>();
+bool hasSubscriberRegistry = hud.HasSubscriberRegistry();
 int count = SubscriberHelper.GetSubscriberCount<DamageEvent, HUDDisplay>();
 ```
 
 - `HasPublisher<TEvent>()`：确认目标事件发布器是否已注册。
+- `HasSubscriberRegistry()`：确认当前运行时订阅者类型是否存在生成的注册表。
 - `GetSubscriberCount<TEvent, TSubscriber>()`：确认某个事件/订阅者组合当前注册了多少实例。
 
 # 核心 API
@@ -286,6 +288,30 @@ subscriber.StopListening(); // 手动取消
 ```
 
 `SubscriptionHandle.Dispose()` 是幂等的，多次调用安全。
+
+**共享生命周期代码中的可选订阅**
+
+`StartListening()` 与 `StopListening()` 是严格 API：当运行时类型没有生成订阅者注册表时会抛出异常。如果你在公共基类、UI 生命周期等位置统一处理订阅，而部分实例并没有 `[OnEvent]` 处理器，请使用 `Try` API：
+
+```csharp
+private SubscriptionHandle _handle;
+
+void OnEnable()
+{
+    if (this.TryStartListening(out var handle))
+        _handle = handle;
+}
+
+void OnDisable()
+{
+    _handle.Dispose();
+
+    // 或者在不保存句柄时：
+    this.TryStopListening();
+}
+```
+
+当运行时类型没有生成订阅者注册表时，`TryStartListening(out handle)` 与 `TryStopListening()` 返回 `false`。它们不会隐藏实际事件发布路径的初始化错误；用途是表达“该对象可能不是订阅者”的可选生命周期。
 
 **仅订阅某一种事件**（当订阅者处理多种事件类型时）：
 
